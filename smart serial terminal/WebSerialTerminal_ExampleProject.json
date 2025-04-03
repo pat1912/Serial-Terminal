@@ -1,0 +1,45 @@
+{
+  "projectName": "Example Device Project",
+  "baudRate": 115200,
+  "dataBits": 8,
+  "stopBits": 1,
+  "parity": "none",
+  "txCommands": [
+    {
+      "name": "Query Status",
+      "hex": "02 1A 00 E3",
+      "description": "Requests the device's current status flags."
+    },
+    {
+      "name": "Reset MCU",
+      "hex": "01 FF 00 EE",
+      "description": "Sends the standard reset sequence."
+    },
+    {
+      "name": "Set LED Red",
+      "hex": "A0 01 FF 5E",
+      "description": "Turns the onboard LED to Red."
+    }
+  ],
+  "rxCmdBytePos": 1,
+  "rxCmdMap": {
+    "41": "ACK Signal",
+    "4E": "NACK / Error",
+    "5A": "Device Status Resp",
+    "D1": "Temperature Reading"
+  },
+  "rxDelimiterHex": "0A",
+  "rxUseDelimiter": true,
+  "scripts": [
+    {
+      "name": "Basic Handshake",
+      "description": "Performs a basic handshake sequence:\n1. Send 'Reset MCU' command.\n2. Wait up to 1 second for a response with the description 'ACK Signal'.\n3. If ACK received, pause briefly and send 'Query Status'.\n4. Wait up to 1.5 seconds for a response with the description 'Device Status Resp'.\n5. Log results or timeouts.",
+      "code": "// Available API: await sendCommand(name), await sendHex(hexString), await sendAscii(str),\n//              await waitForData({ pattern, timeout, format }), log(message), await sleep(ms),\n//              getCommands(), getRxDefinitions()\nlog('Starting handshake script...');\ntry {\n  log('Sending Reset command...');\n  const sentReset = await sendCommand('Reset MCU');\n  if (!sentReset) {\n    log('Failed to send Reset command.');\n    return; // Stop script if send fails\n  }\n\n  log('Waiting for ACK Signal description...');\n  // Use 'description' format to match mapped RX description\n  let ack = await waitForData({ pattern: /ACK Signal/i, timeout: 1000, format: 'description' });\n\n  if (ack) {\n    log('Handshake ACK received. (Hex: ' + ack.hex + ')');\n    await sleep(100); // Short pause\n\n    log('Sending Query Status command...');\n    const sentQuery = await sendCommand('Query Status');\n    if (!sentQuery) {\n       log('Failed to send Query Status command.');\n       return;\n    }\n\n    log('Waiting for Status Response description...');\n    let status = await waitForData({ pattern: /Device Status Resp/i, timeout: 1500, format: 'description' });\n    if (status) {\n        log('Status Response received: ' + status.description + ' (Hex: ' + status.hex + ')');\n    } else {\n        log('TIMEOUT waiting for Status Response.');\n    }\n\n  } else {\n    log('ERROR: Handshake ACK timed out or description not matched.');\n  }\n} catch (e) {\n   log('SCRIPT ERROR: ' + e.message);\n}\nlog('Handshake script finished.');\n/** Script Explanation:\n * - Sends the 'Reset MCU' command.\n * - Waits up to 1000ms (1s) for a response message whose mapped description contains 'ACK Signal'.\n * - If ACK is received:\n *   - Logs the received hex data.\n *   - Pauses for 100ms.\n *   - Sends the 'Query Status' command.\n *   - Waits up to 1500ms (1.5s) for a response whose description contains 'Device Status Resp'.\n *   - Logs the received status details or a timeout message.\n * - If the initial ACK is not received within 1s, logs an error.\n * - Logs any unexpected script errors.\n * - Logs when the script completes.\n*/"
+    },
+    {
+      "name": "Read Temp Loop",
+      "description": "Simple loop example:\n1. Send 'Set LED Red' command.\n2. Loop 3 times:\n   - Wait 1 second.\n   - Wait up to 2 seconds for *any* data.\n   - Log received data (hex and description if available) or log timeout.",
+      "code": "// Simple loop example - Sends Set LED Red then waits for any data\nlog('Starting LED and Read loop...');\ntry {\n  await sendCommand('Set LED Red');\n  log('Set LED Red command sent.');\n\n  for (let i=0; i<3; i++) { \n     await sleep(1000); \n     log('Waiting for any data (Loop ' + (i+1) + ')...');\n     let anyData = await waitForData({ timeout: 2000 }); // Wait for any data for 2s\n     if (anyData) {\n       log('Received Data (Loop ' + (i+1) + '): ' + anyData.hex + (anyData.description ? ' ['+anyData.description+']' : ''));\n     } else {\n       log('No data received in loop ' + (i+1));\n     }\n  }\n} catch (e) {\n  log('SCRIPT ERROR: ' + e.message);\n}\nlog('Read Temp Loop finished.');\n/** Script Explanation:\n * - Sends the 'Set LED Red' command.\n * - Enters a loop that repeats 3 times:\n *   - Pauses execution for 1000ms (1 second).\n *   - Waits for up to 2000ms (2 seconds) for *any* incoming data packet.\n *   - If data is received within the timeout, logs its hex value and description (if one is mapped).\n *   - If no data is received within 2 seconds, logs that no data was received for that loop iteration.\n * - Logs any unexpected script errors.\n * - Logs when the script loop completes.\n*/"
+    }
+  ]
+}

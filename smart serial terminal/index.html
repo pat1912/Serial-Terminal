@@ -1,0 +1,2809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Serial Terminal V6.0 + Script Wizard</title>
+    <style>
+        /* Basic Reset & Font */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Layout Structure */
+        .container {
+            display: flex;
+            flex-grow: 1; /* Takes remaining height */
+            overflow: hidden; /* Prevent container scroll */
+            padding: 15px;
+            gap: 15px; /* Space between columns */
+        }
+
+        header {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            border-bottom: 3px solid #3498db;
+            flex-shrink: 0; /* Prevent header shrinking */
+            min-height: 40px; /* Ensure minimum height */
+        }
+
+        header .title-area {
+            flex-grow: 1; /* Pushes other elements to the right */
+            min-width: 150px; /* Ensure title doesn't collapse too much */
+        }
+
+        header h1 {
+            margin: 0 0 2px 0;
+            font-size: 1.3em;
+            white-space: nowrap;
+        }
+        header .project-name {
+            font-size: 0.85em;
+            color: #bdc3c7;
+            font-style: italic;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 250px; /* Adjust as needed */
+            display: inline-block;
+             vertical-align: middle;
+             cursor: help; /* Indicate tooltip */
+        }
+
+        /* --- Header Control Styling --- */
+        .project-controls, .connection-controls {
+            display: flex;
+            align-items: center; /* Vertical alignment for flex items */
+            gap: 10px;
+            flex-shrink: 0; /* Prevent controls shrinking */
+            flex-wrap: wrap; /* Allow controls to wrap */
+        }
+
+        .connection-status-area {
+            display: inline-flex; /* Use inline-flex for tight wrapping */
+            align-items: center;
+            gap: 8px; /* Space between status and params */
+            flex-shrink: 0;
+            min-width: 100px; /* Reserve some space */
+            line-height: 32px; /* Match control height vertically */
+            margin-right: 5px; /* Space before connect button */
+        }
+
+        .connection-status {
+            font-style: italic;
+            color: #bdc3c7;
+            white-space: nowrap;
+            line-height: 1; /* Align text better */
+             min-width: 90px; /* Reserve space */
+             text-align: right; /* Align status text right */
+        }
+        .connection-status.connected { color: #2ecc71; }
+        .connection-status.error { color: #e74c3c; }
+        .connection-status.connecting { color: #f39c12; }
+
+        .connection-params {
+            font-size: 0.8em;
+            color: #bdc3c7;
+            white-space: nowrap;
+            line-height: 1;
+            font-family: Consolas, Monaco, monospace; /* Monospace for params */
+            background-color: rgba(0,0,0,0.1); /* Subtle background */
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+
+        /* Standardize height and alignment for controls in header */
+        header button {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            font-size: 0.9em;
+            height: 32px; /* Consistent height */
+            box-sizing: border-box; /* Include padding/border in height */
+            border: 1px solid transparent; /* Base border */
+            border-radius: 4px;
+            vertical-align: middle;
+        }
+        header button.small { /* Slightly smaller text for project buttons */
+            font-size: 0.85em;
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+        /* Header selects removed - moved to left panel */
+        header label { /* Header labels removed */
+             display: none;
+        }
+        header .connection-controls button.primary,
+        header .connection-controls button.secondary {
+             padding-left: 15px;
+             padding-right: 15px;
+             border: none; /* Override base border */
+        }
+        header .connection-controls button.subtle {
+             /* Ensure subtle button border is shown */
+             border: 1px solid #bdc3c7;
+        }
+        /* --- End Header Control Styling --- */
+
+
+        /* Panels */
+        .left-panel {
+            width: 380px; /* Keep width */
+            flex-shrink: 0; /* Don't shrink */
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-y: auto; /* Scroll if content overflows */
+            height: calc(100vh - 90px); /* Adjust based on header height + padding */
+        }
+
+        .right-panel {
+            flex-grow: 1; /* Take remaining width */
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden; /* Control scrolling within log area */
+            height: calc(100vh - 90px); /* Adjust based on header height + padding */
+        }
+
+        /* General Element Styling (excluding header overrides) */
+        button {
+            padding: 8px 15px; /* Default padding for non-header buttons */
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s ease;
+            white-space: nowrap;
+        }
+         button.small { /* Default small button */
+             padding: 5px 10px;
+             font-size: 0.8em;
+         }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button.primary { background-color: #3498db; color: white; }
+        button.primary:hover:not(:disabled) { background-color: #2980b9; }
+        button.secondary { background-color: #e74c3c; color: white; }
+        button.secondary:hover:not(:disabled) { background-color: #c0392b; }
+        button.action { background-color: #2ecc71; color: white; }
+        button.action:hover:not(:disabled) { background-color: #27ae60; }
+        button.warning { background-color: #f39c12; color: white; }
+        button.warning:hover:not(:disabled) { background-color: #e67e22; }
+        button.info { background-color: #9b59b6; color: white; }
+        button.info:hover:not(:disabled) { background-color: #8e44ad; }
+        button.subtle { background-color: #ecf0f1; color: #34495e; border: 1px solid #bdc3c7;}
+        button.subtle:hover:not(:disabled) { background-color: #bdc3c7; }
+
+
+        select, input[type="text"], input[type="number"], textarea {
+            padding: 8px; /* Default padding */
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box; /* Include padding in width */
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        select:disabled {
+            background-color: #ecf0f1;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+         input[type="text"].hex-input {
+             font-family: Consolas, Monaco, monospace; /* Monospace for Hex */
+             text-transform: uppercase; /* Convention for Hex */
+         }
+         input:invalid {
+             border-color: #e74c3c;
+         }
+
+
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+        }
+        textarea.script-editor { /* Style for OLD editor - can remove if not reused */
+             min-height: 150px;
+             background-color: #34495e;
+             color: #ecf0f1;
+             font-size: 0.95em;
+             border: 1px solid #7f8c8d;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        fieldset {
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            background-color: #fdfefe;
+        }
+
+        legend {
+            font-weight: bold;
+            padding: 0 5px;
+            font-size: 1em;
+            color: #2c3e50;
+        }
+
+        .form-group { margin-bottom: 15px; }
+        .form-inline-group { display: flex; gap: 10px; align-items: center; margin-bottom: 10px;}
+        .form-inline-group label { margin-bottom: 0; white-space: nowrap; font-weight: normal; } /* Less emphasis on inline labels */
+        .form-inline-group input, .form-inline-group select { width: auto; flex-grow: 1; margin-bottom: 0;}
+        .form-inline-group input[type="number"] { max-width: 80px; }
+        .form-inline-group select { flex-grow: 1; /* Allow select to take space */}
+
+        small { font-size: 0.8em; color: #555; margin-top: -5px; display: block; }
+        .error-message { color: #e74c3c; font-size: 0.85em; margin-top: 5px; font-weight: bold;}
+        .warning-message { color: #f39c12; font-size: 0.85em; margin-top: 5px; font-weight: bold;}
+
+
+        /* Command & List Styling (Shared by TX Commands, RX Definitions, Scripts) */
+        .item-list ul { list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; border: 1px solid #ecf0f1; border-radius: 3px; }
+        .item-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #ecf0f1; background-color: white;}
+        .item-list li:last-child { border-bottom: none; }
+        .item-list li:nth-child(odd) { background-color: #f8f9f9; }
+        .item-list .item-details { /* Container for name/value + description */
+            flex-grow: 1;
+            margin-right: 10px;
+            font-size: 0.9em;
+            overflow: hidden; /* Allow truncation within */
+        }
+        .item-list .item-primary { /* For name or Hex Value */
+             font-weight: normal; /* TX name is normal, make RX value normal too */
+             font-family: Consolas, Monaco, monospace; /* Use monospace for Hex */
+             margin-right: 8px;
+             display: inline-block; /* Allow margin */
+             vertical-align: middle;
+             background-color: #f0f0f0; /* Slight background for Hex */
+             padding: 1px 4px;
+             border-radius: 2px;
+             min-width: 30px; /* Ensure short hex values have space */
+             text-align: center;
+        }
+         .item-list .item-secondary { /* For description or TX hex */
+             font-style: normal; /* Normal style for description */
+             color: #333;
+             /* Truncation Styles */
+             white-space: nowrap;
+             overflow: hidden;
+             text-overflow: ellipsis;
+             max-width: 180px; /* Adjust max-width as needed */
+             cursor: help; /* Indicate tooltip is available */
+             display: inline-block; /* Needed for max-width */
+             vertical-align: middle; /* Align better with buttons */
+         }
+        .item-list .item-actions { display: flex; gap: 5px; flex-shrink: 0; /* Prevent buttons wrapping */ }
+        .item-list .item-actions button { margin-left: 0; } /* Remove default margin if needed */
+
+        /* RX Definition Table - REMOVED */
+        /* .rx-map-table { ... } */
+
+
+        /* Log Area */
+        .log-header {
+            padding: 10px 15px;
+            border-bottom: 1px solid #ecf0f1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8f9f9;
+            flex-shrink: 0; /* Prevent shrinking */
+            flex-wrap: wrap; /* Allow wrapping log controls */
+            gap: 10px; /* Space between title and controls */
+        }
+
+        .log-header h2 { margin: 0; font-size: 1.2em; color: #2c3e50; flex-shrink: 0; }
+        .log-controls { display: flex; align-items: center; gap: 5px; flex-wrap: wrap;}
+        .log-controls label, .log-controls select { font-size: 0.9em; margin-left: 5px; }
+        .log-controls button { margin-left: 10px; }
+        /* Ensure log controls buttons are sized appropriately if needed */
+        .log-controls button.small {
+            padding: 5px 10px;
+            font-size: 0.8em;
+        }
+         .log-controls select { /* Adjust log select if needed */
+             padding: 4px 8px;
+             font-size: 0.9em;
+             height: auto; /* Override header height if desired */
+         }
+
+        .log-display {
+            flex-grow: 1; /* Take remaining space in right panel */
+            overflow: auto; /* Enable both vertical and horizontal scrolling */
+            padding: 10px 15px;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+             /* Default Theme (overridden by theme classes) */
+             background-color: #2b3e50;
+             color: #ecf0f1;
+             white-space: nowrap; /* Prevent wrapping within the container */
+        }
+
+        .log-display .log-entry {
+             /* white-space: nowrap; <<< MOVED to parent .log-display */
+             margin-bottom: 2px;
+             display: block; /* Ensure each entry takes full width available for scrolling */
+        }
+        .log-display .timestamp { color: #95a5a6; margin-right: 10px; display: inline-block;}
+        .log-display .direction { font-weight: bold; margin-right: 5px; display: inline-block; min-width: 25px;}
+        .log-display .data { margin-right: 10px; display: inline-block; white-space: pre; /* Preserve whitespace in data */ }
+        .log-display .description { font-style: italic; display: inline-block; } /* Default description style */
+
+        /* Default Theme Colors (Applied via .log-theme-default) */
+        .log-theme-default { background-color: #2b3e50; color: #ecf0f1; }
+        .log-theme-default .timestamp { color: #95a5a6; }
+        .log-theme-default .direction-tx { color: #87CEFA; } /* Light Blue */
+        .log-theme-default .direction-rx { color: #90EE90; } /* Light Green */
+        .log-theme-default .direction-script { color: #f39c12; } /* Orange */
+        .log-theme-default .direction-sys { color: #bdc3c7; } /* Silver */
+        .log-theme-default .direction-error { color: #e74c3c; } /* Red */
+        .log-theme-default .data-tx { color: #87CEFA; }
+        .log-theme-default .data-rx { color: #90EE90; }
+        .log-theme-default .data-script {} /* Default color */
+        .log-theme-default .data-sys {}
+        .log-theme-default .data-error {}
+        .log-theme-default .description { color: #FFD700; } /* Gold */
+
+        /* Dark Theme */
+        .log-theme-dark { background-color: #1c1c1c; color: #e0e0e0; }
+        .log-theme-dark .timestamp { color: #7f8c8d; }
+        .log-theme-dark .direction-tx { color: #00bcd4; } /* Cyan */
+        .log-theme-dark .direction-rx { color: #8bc34a; } /* Light Green */
+        .log-theme-dark .direction-script { color: #9c27b0; } /* Purple */
+        .log-theme-dark .direction-sys { color: #9e9e9e; } /* Grey */
+        .log-theme-dark .direction-error { color: #f44336; } /* Red */
+        .log-theme-dark .data-tx { color: #00bcd4; }
+        .log-theme-dark .data-rx { color: #8bc34a; }
+        .log-theme-dark .data-script {}
+        .log-theme-dark .data-sys {}
+        .log-theme-dark .data-error {}
+        .log-theme-dark .description { color: #ffeb3b; } /* Yellow */
+
+        /* Light Theme */
+        .log-theme-light { background-color: #ffffff; color: #333333; border: 1px solid #eee;}
+        .log-theme-light .timestamp { color: #777; }
+        .log-theme-light .direction-tx { color: #0277bd; } /* Darker Blue */
+        .log-theme-light .direction-rx { color: #388e3c; } /* Darker Green */
+        .log-theme-light .direction-script { color: #7b1fa2; } /* Dark Purple */
+        .log-theme-light .direction-sys { color: #616161; } /* Dark Grey */
+        .log-theme-light .direction-error { color: #d32f2f; } /* Dark Red */
+        .log-theme-light .data-tx { color: #0277bd; }
+        .log-theme-light .data-rx { color: #388e3c; }
+        .log-theme-light .data-script {}
+        .log-theme-light .data-sys {}
+        .log-theme-light .data-error {}
+        .log-theme-light .description { color: #f57c00; } /* Orange */
+
+        /* High Contrast Theme */
+        .log-theme-highcontrast { background-color: #000000; color: #ffffff; border: 1px solid #555;}
+        .log-theme-highcontrast .timestamp { color: #aaaaaa; }
+        .log-theme-highcontrast .direction-tx { color: #00ffff; } /* Cyan */
+        .log-theme-highcontrast .direction-rx { color: #00ff00; } /* Bright Green */
+        .log-theme-highcontrast .direction-script { color: #ffff00; } /* Yellow */
+        .log-theme-highcontrast .direction-sys { color: #dddddd; } /* Light Grey */
+        .log-theme-highcontrast .direction-error { color: #ff0000; } /* Bright Red */
+        .log-theme-highcontrast .data-tx { color: #00ffff; }
+        .log-theme-highcontrast .data-rx { color: #00ff00; }
+        .log-theme-highcontrast .data-script {}
+        .log-theme-highcontrast .data-sys {}
+        .log-theme-highcontrast .data-error {}
+        .log-theme-highcontrast .description { color: #ff00ff; } /* Magenta */
+
+
+        /* --- Script Wizard Modal Styles --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.5); /* Black w/ opacity */
+            align-items: center;
+            justify-content: center;
+        }
+         .modal.hidden { /* Explicitly hide */
+             display: none;
+         }
+         .modal:not(.hidden) { /* Use flex to show */
+            display: flex;
+         }
+
+        .modal-content {
+            background-color: #fff;
+            margin: auto; /* Centered */
+            padding: 20px 30px 30px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            width: 90%;
+            max-width: 750px; /* Max width */
+            max-height: 90vh; /* Max height */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevent content spilling */
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 20px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.4em;
+            color: #2c3e50;
+             border-bottom: none; /* Remove duplicate border */
+             padding-bottom: 0;
+        }
+        .modal-header .close-btn {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #aaa;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+        .modal-header .close-btn:hover {
+            color: #333;
+        }
+
+        .modal-body {
+             overflow-y: auto; /* Enable scrolling for content */
+             flex-grow: 1;
+             padding-right: 10px; /* Space for scrollbar */
+        }
+
+        .wizard-step {
+            display: none; /* Hide all steps initially */
+            /* Removed top border/margin as modal-body handles separation */
+        }
+        .wizard-step.active {
+            display: block; /* Show active step */
+        }
+
+        .wizard-step h3 { /* Use h3 inside modal */
+            margin-top: 0;
+            color: #3498db; /* Step title color */
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+        /* Adapt form elements for modal if needed */
+        .modal-content label {
+            font-size: 0.9em;
+            margin-bottom: 6px;
+        }
+        .modal-content input[type="text"],
+        .modal-content textarea {
+            margin-bottom: 12px;
+            padding: 8px;
+            font-size: 0.9em;
+        }
+        .modal-content textarea {
+            min-height: 80px; /* Adjust height for modal */
+        }
+
+        /* Specific Wizard elements */
+         .modal-content textarea#wizardAiPromptDisplay {
+            background-color: #ecf0f1;
+            font-size: 0.8em;
+            min-height: 150px;
+            max-height: 30vh; /* Limit height */
+        }
+         .modal-content #wizardAiExplanationDisplay {
+             background-color: #f0f0f0;
+             border: 1px solid #ccc;
+             padding: 10px;
+             border-radius: 4px;
+             min-height: 40px;
+             font-size: 0.85em;
+             white-space: pre-wrap; /* Preserve formatting */
+             margin-bottom: 10px; /* Space before code area */
+             color: #333;
+             max-height: 25vh; /* Limit height */
+             overflow-y: auto;
+         }
+         .modal-content #wizardAiExplanationDisplay.placeholder {
+             color: #777;
+             font-style: italic;
+         }
+
+        .modal-content textarea#wizardPastedCode {
+             background-color: #e8f6fd; /* Light blue bg for pasting */
+             font-size: 0.85em;
+             min-height: 120px;
+             max-height: 35vh; /* Limit height */
+        }
+        .modal-content .prompt-instructions {
+            font-size: 0.8em;
+            color: #555;
+            background-color: #f8f9f9;
+            padding: 8px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .modal-content .warning-message {
+             margin-top: 15px;
+             margin-bottom: 10px;
+             padding: 10px;
+             background-color: #fcf8e3;
+             border: 1px solid #faebcc;
+             border-radius: 4px;
+             font-size: 0.85em;
+             color: #8a6d3b;
+         }
+         .modal-content .warning-message strong { color: #c0392b; }
+
+        .wizard-button-group {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+         .wizard-button-group .right-buttons {
+             margin-left: auto; /* Push right buttons to the right */
+             display: flex;
+             gap: 10px;
+             flex-wrap: wrap;
+         }
+         .wizard-button-group .left-buttons {
+             display: flex;
+             gap: 10px;
+             flex-wrap: wrap;
+         }
+         .modal-content button { /* Ensure modal buttons inherit general style but allow overrides */
+            margin-top: 0; /* Reset top margin for flex alignment */
+             padding: 8px 15px; /* Consistent padding */
+         }
+
+        /* --- End Script Wizard Modal Styles --- */
+
+
+        /* Utility */
+        .hidden { display: none !important; } /* Use !important to override potential conflicts */
+
+        /* Validation Styling */
+        input.invalid, textarea.invalid, select.invalid {
+             border-color: #e74c3c;
+             box-shadow: 0 0 3px rgba(231, 76, 60, 0.5);
+        }
+        .validation-error {
+             color: #e74c3c;
+             font-size: 0.8em;
+             margin-top: -8px; /* Adjust for modal/main form */
+             margin-bottom: 8px;
+             display: block;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-area">
+            <h1>Web Serial Terminal</h1>
+            <span class="project-name" id="projectName" title="Untitled Project">Untitled Project</span>
+        </div>
+        <div class="project-controls">
+            <button id="openProjectBtn" class="subtle small">Open Project...</button>
+            <button id="saveProjectBtn" class="subtle small">Save Project As...</button>
+        </div>
+        <div class="connection-controls">
+            <!-- Baud Rate Select moved to left panel -->
+            <div class="connection-status-area">
+                <span id="status" class="connection-status">Disconnected</span>
+                <span id="connParamsDisplay" class="connection-params hidden"></span> <!-- Display for connection params -->
+            </div>
+            <button id="connectBtn" class="primary">Connect</button>
+            <button id="disconnectBtn" class="secondary hidden">Disconnect</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside class="left-panel">
+
+            <!-- Serial Port Settings -->
+            <fieldset>
+                <legend>Serial Port Settings</legend>
+                 <div class="form-inline-group">
+                     <label for="baudRate">Baud Rate:</label>
+                     <select id="baudRate">
+                         <option value="9600">9600</option>
+                         <option value="19200">19200</option>
+                         <option value="38400">38400</option>
+                         <option value="57600">57600</option>
+                         <option value="115200" selected>115200</option>
+                         <option value="230400">230400</option>
+                         <option value="460800">460800</option>
+                         <option value="921600">921600</option>
+                     </select>
+                 </div>
+                 <div class="form-inline-group">
+                     <label for="dataBits">Data Bits:</label>
+                     <select id="dataBits">
+                         <option value="7">7</option>
+                         <option value="8" selected>8</option>
+                     </select>
+                 </div>
+                 <div class="form-inline-group">
+                     <label for="stopBits">Stop Bits:</label>
+                     <select id="stopBits">
+                         <option value="1" selected>1</option>
+                         <option value="2">2</option>
+                     </select>
+                 </div>
+                 <div class="form-inline-group">
+                     <label for="parity">Parity:</label>
+                     <select id="parity">
+                         <option value="none" selected>None</option>
+                         <option value="even">Even</option>
+                         <option value="odd">Odd</option>
+                     </select>
+                 </div>
+            </fieldset>
+
+            <!-- Saved TX Commands -->
+            <fieldset class="item-list">
+                <legend>TX Commands (Hex)</legend>
+                <ul id="txCmdList">
+                     <li><span class="item-details" style="color: #777;">No commands defined yet.</span></li>
+                </ul>
+                <button id="addTxCmdBtn" class="primary small" style="margin-top: 10px;">Add New TX Command</button>
+            </fieldset>
+             <!-- Add/Edit TX Command Form (Initially hidden) -->
+             <fieldset id="addTxCmdForm" class="hidden">
+                 <legend>Create/Edit TX Command</legend>
+                 <input type="hidden" id="txCmdEditName" value=""> <!-- Store original name for editing -->
+                  <div class="form-group">
+                      <label for="txCmdName">Command Name:</label>
+                      <input type="text" id="txCmdName" placeholder="e.g., Read Sensor" required>
+                      <span class="validation-error hidden">Name is required.</span>
+                      <span class="validation-error hidden" id="txCmdNameUniqueError">Name must be unique.</span>
+                  </div>
+                  <div class="form-group">
+                      <label for="txCmdDataHex">Command Data (Hex):</label>
+                      <input type="text" id="txCmdDataHex" class="hex-input" placeholder="e.g., 02 1A FF 03" required pattern="^([0-9A-Fa-f]{2}(\s+|$))+$">
+                      <small>Enter space-separated hexadecimal bytes (e.g., 0A FF 10).</small>
+                      <span class="validation-error hidden">Invalid Hex format. Use pairs like '0A', 'FF', separated by spaces.</span>
+                  </div>
+                  <div class="form-group">
+                       <label for="txCmdDesc">Description (Optional):</label>
+                       <input type="text" id="txCmdDesc" placeholder="e.g., Reads temperature sensor value">
+                  </div>
+                 <button id="saveTxCmdBtn" class="primary small">Save Command</button>
+                 <button id="cancelTxCmdBtn" class="subtle small">Cancel</button>
+             </fieldset>
+
+            <!-- RX Message Definitions (NEW STRUCTURE) -->
+            <fieldset class="item-list">
+                <legend>RX Message Definitions</legend>
+                 <div class="form-inline-group">
+                     <label for="cmdBytePos">Cmd Byte Index:</label>
+                     <input type="number" id="cmdBytePos" value="1" min="0" style="max-width: 60px;" required>
+                     <span style="font-size: 0.8em; color: #555;">(Zero-based index)</span>
+                 </div>
+                <ul id="rxDefList" style="margin-top: 10px;">
+                    <li><span class="item-details" style="color: #777;">No definitions yet.</span></li>
+                </ul>
+                <button id="addRxDefBtn" class="primary small" style="margin-top: 10px;">Add New RX Definition</button>
+            </fieldset>
+             <!-- Add/Edit RX Definition Form (Initially hidden, NEW) -->
+             <fieldset id="addRxDefForm" class="hidden">
+                 <legend>Create/Edit RX Definition</legend>
+                 <input type="hidden" id="rxDefEditValue" value=""> <!-- Store original hex value for editing -->
+                  <div class="form-group">
+                      <label for="rxDefValueHex">Value (Hex):</label>
+                      <input type="text" id="rxDefValueHex" class="hex-input" placeholder="e.g., C3" required pattern="^[0-9A-Fa-f]{1,2}$" style="max-width: 100px;">
+                      <small>Enter 1 or 2 hexadecimal characters (0-9, A-F).</small>
+                      <span class="validation-error hidden">Invalid Hex format (1-2 chars).</span>
+                      <span class="validation-error hidden" id="rxDefValueUniqueError">Hex value must be unique.</span>
+                  </div>
+                  <div class="form-group">
+                      <label for="rxDefDescription">Description:</label>
+                      <input type="text" id="rxDefDescription" placeholder="e.g., ACK Signal Received" required>
+                       <span class="validation-error hidden">Description is required.</span>
+                  </div>
+                 <button id="saveRxDefBtn" class="primary small">Save Definition</button>
+                 <button id="cancelRxDefBtn" class="subtle small">Cancel</button>
+             </fieldset>
+
+             <!-- Delimiter -->
+             <fieldset>
+                 <legend>General RX Delimiter (Hex)</legend>
+                 <div class="form-group">
+                     <label for="delimiterHex">Delimiter Hex Bytes:</label>
+                     <input type="text" id="delimiterHex" class="hex-input" placeholder="e.g., 0D 0A" value="0A" pattern="^([0-9A-Fa-f]{2}(\s+|$))*$">
+                     <small>Enter space-separated hexadecimal bytes. Leave empty for no delimiter.</small>
+                      <span class="validation-error hidden">Invalid Hex format. Use pairs like '0A', 'FF', separated by spaces, or leave empty.</span>
+                 </div>
+                 <div class="form-group radio-group">
+                      <label style="font-weight:normal; display:inline-flex; align-items:center; gap: 5px;">
+                          <input type="checkbox" id="useDelimiter" checked style="width:auto; margin-bottom: 0;"> Use Delimiter</label>
+                 </div>
+            </fieldset>
+
+
+            <!-- Scripting -->
+            <fieldset class="item-list">
+                <legend>Automation Scripts</legend>
+                 <ul id="scriptList">
+                    <li><span class="item-details" style="color: #777;">No scripts defined yet.</span></li>
+                 </ul>
+                  <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="addScriptBtn" class="primary small">Add New Script (Wizard)</button>
+                 </div>
+            </fieldset>
+
+        </aside>
+
+        <section class="right-panel">
+            <div class="log-header">
+                 <h2>Communication Log</h2>
+                 <div class="log-controls">
+                     <label for="logTheme">Theme:</label>
+                     <select id="logTheme">
+                         <option value="log-theme-default">Default Dark</option>
+                         <option value="log-theme-dark">Dark</option>
+                         <option value="log-theme-light">Light</option>
+                         <option value="log-theme-highcontrast">High Contrast</option>
+                     </select>
+                     <button id="clearLogBtn" class="warning small">Clear Log</button>
+                     <button id="copyLogBtn" class="subtle small">Copy Log</button>
+                     <button id="saveLogBtn" class="subtle small">Save Log (.log)</button>
+                 </div>
+            </div>
+
+            <!-- Log Display: Add theme class dynamically with JS -->
+            <div class="log-display log-theme-default" id="logDisplay">
+                 <div class="log-entry"><span class="timestamp">--:--:--.---</span><span class="direction direction-sys">SYS:</span><span class="data">Welcome! Select connection settings and click Connect.</span></div>
+                 <div class="log-entry"><span class="timestamp">--:--:--.---</span><span class="direction direction-sys">SYS:</span><span class="data">Load a project or define commands/scripts.</span></div>
+                 <div class="log-entry" id="webSerialWarning"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- File Input for Loading Projects -->
+    <input type="file" id="loadProjectInput" accept=".json" class="hidden">
+
+    <!-- Script Wizard Modal -->
+    <div id="scriptWizardModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="wizardTitle">Script Wizard</h2>
+                <button id="wizardCloseBtn" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Define Logic -->
+                <div id="wizardStep1" class="wizard-step active">
+                    <h3>Step 1: Define Script Logic</h3>
+                    <input type="hidden" id="wizardOriginalScriptName" value=""> <!-- For tracking during edit -->
+                    <div class="form-group">
+                        <label for="wizardScriptName">Script Name:</label>
+                        <input type="text" id="wizardScriptName" placeholder="Enter a unique name for your script">
+                        <span id="wizardScriptNameError" class="validation-error hidden">Script name error.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="wizardScriptDescription">Describe Script Logic (in plain English):</label>
+                        <textarea id="wizardScriptDescription" rows="5" placeholder="Example: Send 'Reset MCU', wait 500ms for 'ACK Signal' description, if received send 'Query Status', otherwise log an error and stop."></textarea>
+                        <span id="wizardScriptDescriptionError" class="validation-error hidden">Script description is required.</span>
+                    </div>
+                </div>
+
+                <!-- Step 2: Generate & Review AI Prompt -->
+                <div id="wizardStep2" class="wizard-step">
+                    <h3>Step 2: Generate & Review AI Prompt</h3>
+                    <div class="prompt-instructions">
+                        Copy the prompt below and paste it into your preferred AI tool (e.g., ChatGPT, Claude). Then, paste the AI's *single code block response* (which includes code and the final explanation comment) back into the next step.
+                    </div>
+                    <div class="form-group">
+                        <label for="wizardAiPromptDisplay">Generated AI Prompt:</label>
+                        <textarea id="wizardAiPromptDisplay" readonly></textarea>
+                    </div>
+                </div>
+
+                <!-- Step 3: Paste, Review Explanation, & Save Code -->
+                <div id="wizardStep3" class="wizard-step">
+                    <h3>Step 3: Paste, Review Explanation, & Save Code</h3>
+                    <div class="form-group">
+                        <label for="wizardAiExplanationDisplay">AI's Explanation of Script:</label>
+                        <div id="wizardAiExplanationDisplay" class="placeholder">(Explanation will appear here after pasting code containing the explanation comment block)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="wizardPastedCode">Paste Entire Generated Response Here (Code Block Only):</label>
+                        <textarea id="wizardPastedCode" placeholder="Paste the JavaScript code AND explanation comment provided by the AI here..."></textarea>
+                        <span id="wizardPastedCodeError" class="validation-error hidden">Pasted code cannot be empty.</span>
+                    </div>
+                    <div class="warning-message">
+                        <strong>Security Warning:</strong> Review the code pasted above carefully before saving and running. Code from external sources, including AI, may have unintended consequences or security risks. Ensure it only uses the expected API calls. Verify the AI's explanation matches the code's actions.
+                    </div>
+                </div>
+            </div> <!-- End modal-body -->
+
+            <!-- Wizard Button Group (Common Footer) -->
+             <div class="wizard-button-group">
+                 <span class="left-buttons">
+                    <button id="wizardBackBtn" class="secondary hidden">Back</button> <!-- Hidden on step 1 -->
+                    <button id="wizardCancelBtn" class="subtle">Cancel</button>
+                     <button id="wizardCopyPromptBtn" class="subtle hidden">Copy Prompt</button> <!-- Shown on step 2 -->
+                 </span>
+                 <span class="right-buttons">
+                    <button id="wizardNextBtn" class="primary">Next</button> <!-- Text changes based on step -->
+                    <button id="wizardSaveBtn" class="primary hidden">Save Script</button> <!-- Shown on step 3 -->
+                 </span>
+            </div>
+
+        </div> <!-- End modal-content -->
+    </div> <!-- End scriptWizardModal -->
+
+
+    <script>
+        // --- Constants & Globals ---
+        const MAX_LOG_ENTRIES = 1000; // Limit log entries in memory/display
+        const LOCAL_STORAGE_KEY_STATE = 'webSerialTerminalState_v6_0'; // Updated key
+        const LOCAL_STORAGE_KEY_THEME = 'webSerialTerminalTheme';
+        const HEX_REGEX = /^([0-9A-Fa-f]{2}(\s+|$))+$/;
+        const HEX_DELIM_REGEX = /^([0-9A-Fa-f]{2}(\s+|$))*$/; // Allows empty
+        const HEX_BYTE_REGEX = /^[0-9A-Fa-f]{1,2}$/i;
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        const SCRIPT_EXPLANATION_REGEX = /\/\*\*\s*Script Explanation:\s*([\s\S]*?)\*\//;
+
+
+        // --- Helper Functions ---
+        function getTimestamp() {
+            const now = new Date();
+            return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+        }
+
+        function isValidHex(hexString) {
+            return HEX_REGEX.test(hexString.trim());
+        }
+
+        function isValidDelimiterHex(hexString) {
+            return HEX_DELIM_REGEX.test(hexString.trim());
+        }
+
+        function isValidHexByte(hexString) {
+             return HEX_BYTE_REGEX.test(hexString.trim());
+        }
+
+        // Helper to ensure hex is 2 characters, padded with leading zero if needed
+        function padHexByte(hexString) {
+            return hexString.toUpperCase().padStart(2, '0');
+        }
+
+        function hexStringToUint8Array(hexString) {
+            const cleanHex = hexString.replace(/\s+/g, '');
+            if (cleanHex.length % 2 !== 0) {
+                console.error("Invalid hex string length:", hexString);
+                return new Uint8Array(0); // Or throw error
+            }
+            const bytes = new Uint8Array(cleanHex.length / 2);
+            for (let i = 0; i < cleanHex.length; i += 2) {
+                bytes[i / 2] = parseInt(cleanHex.substring(i, i + 2), 16);
+            }
+            return bytes;
+        }
+
+        function uint8ArrayToHexString(uint8Array, separator = ' ') {
+            return Array.from(uint8Array, byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(separator);
+        }
+
+        // Heuristic display: printable ASCII or <0xXX>
+        function formatReceivedData(uint8Array) {
+            let formatted = '';
+            for (const byte of uint8Array) {
+                if (byte >= 32 && byte <= 126) { // Printable ASCII
+                    formatted += String.fromCharCode(byte);
+                } else if (byte === 0x0A) { // Represent LF visually
+                    formatted += '<LF>';
+                } else if (byte === 0x0D) { // Represent CR visually
+                    formatted += '<CR>';
+                } else if (byte === 0x09) { // Represent TAB visually
+                    formatted += '<TAB>';
+                }
+                 else {
+                    formatted += `<${byte.toString(16).padStart(2, '0').toUpperCase()}>`; // Hex representation
+                }
+            }
+            return formatted;
+        }
+
+        function escapeHtml(unsafe) {
+             if (!unsafe) return '';
+             // Basic escaping for display in HTML, prevent basic XSS
+             return unsafe
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+                  .replace(/"/g, "&quot;")
+                  .replace(/'/g, "&#039;");
+        }
+
+        // Simple debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        };
+
+        // --- Core Application Class ---
+        class App {
+            constructor() {
+                this.port = null;
+                this.reader = null;
+                this.writer = null;
+                this.keepReading = false;
+                this.logEntries = [];
+                this.rxBuffer = new Uint8Array(0);
+                this.pendingScriptWaits = []; // Stores { resolve, reject, options } for waitForData
+
+                // --- Wizard State ---
+                this.wizardCurrentStep = 1;
+                this.wizardData = {
+                    originalScriptName: "", // Store name when editing
+                    scriptName: "",
+                    scriptDescription: "",
+                    pastedCode: ""
+                };
+
+                // --- DOM Elements ---
+                this.dom = {
+                    // Header
+                    connectBtn: document.getElementById('connectBtn'),
+                    disconnectBtn: document.getElementById('disconnectBtn'),
+                    statusSpan: document.getElementById('status'),
+                    connParamsDisplay: document.getElementById('connParamsDisplay'),
+                    projectNameSpan: document.getElementById('projectName'),
+                    openProjectBtn: document.getElementById('openProjectBtn'),
+                    saveProjectBtn: document.getElementById('saveProjectBtn'),
+                    loadProjectInput: document.getElementById('loadProjectInput'),
+                    webSerialWarning: document.getElementById('webSerialWarning'),
+
+                    // Left Panel - Settings
+                    baudRateSelect: document.getElementById('baudRate'),
+                    dataBitsSelect: document.getElementById('dataBits'),
+                    stopBitsSelect: document.getElementById('stopBits'),
+                    paritySelect: document.getElementById('parity'),
+
+                    // TX Commands
+                    txCmdList: document.getElementById('txCmdList'),
+                    addTxCmdBtn: document.getElementById('addTxCmdBtn'),
+                    addTxCmdForm: document.getElementById('addTxCmdForm'),
+                    txCmdEditNameInput: document.getElementById('txCmdEditName'),
+                    txCmdNameInput: document.getElementById('txCmdName'),
+                    txCmdDataHexInput: document.getElementById('txCmdDataHex'),
+                    txCmdDescInput: document.getElementById('txCmdDesc'),
+                    saveTxCmdBtn: document.getElementById('saveTxCmdBtn'),
+                    cancelTxCmdBtn: document.getElementById('cancelTxCmdBtn'),
+                    txCmdNameUniqueError: document.getElementById('txCmdNameUniqueError'),
+
+                    // RX Definitions (NEW STRUCTURE)
+                    cmdBytePosInput: document.getElementById('cmdBytePos'),
+                    rxDefList: document.getElementById('rxDefList'),
+                    addRxDefBtn: document.getElementById('addRxDefBtn'),
+                    addRxDefForm: document.getElementById('addRxDefForm'),
+                    rxDefEditValueInput: document.getElementById('rxDefEditValue'), // Hidden input
+                    rxDefValueHexInput: document.getElementById('rxDefValueHex'),
+                    rxDefDescriptionInput: document.getElementById('rxDefDescription'),
+                    saveRxDefBtn: document.getElementById('saveRxDefBtn'),
+                    cancelRxDefBtn: document.getElementById('cancelRxDefBtn'),
+                    rxDefValueUniqueError: document.getElementById('rxDefValueUniqueError'),
+
+                    // Delimiter
+                    delimiterHexInput: document.getElementById('delimiterHex'),
+                    useDelimiterCheckbox: document.getElementById('useDelimiter'),
+
+                    // Scripting List
+                    scriptList: document.getElementById('scriptList'),
+                    addScriptBtn: document.getElementById('addScriptBtn'), // Launches Wizard
+
+                    // Right Panel - Log
+                    logDisplay: document.getElementById('logDisplay'),
+                    clearLogBtn: document.getElementById('clearLogBtn'),
+                    copyLogBtn: document.getElementById('copyLogBtn'),
+                    saveLogBtn: document.getElementById('saveLogBtn'),
+                    logThemeSelect: document.getElementById('logTheme'),
+
+                    // Script Wizard Modal Elements
+                    scriptWizardModal: document.getElementById('scriptWizardModal'),
+                    wizardTitle: document.getElementById('wizardTitle'),
+                    wizardCloseBtn: document.getElementById('wizardCloseBtn'),
+                    wizardStep1: document.getElementById('wizardStep1'),
+                    wizardStep2: document.getElementById('wizardStep2'),
+                    wizardStep3: document.getElementById('wizardStep3'),
+                    wizardOriginalScriptNameInput: document.getElementById('wizardOriginalScriptName'),
+                    wizardScriptNameInput: document.getElementById('wizardScriptName'),
+                    wizardScriptDescriptionInput: document.getElementById('wizardScriptDescription'),
+                    wizardAiPromptDisplay: document.getElementById('wizardAiPromptDisplay'),
+                    wizardAiExplanationDisplay: document.getElementById('wizardAiExplanationDisplay'),
+                    wizardPastedCodeInput: document.getElementById('wizardPastedCode'),
+                    wizardBackBtn: document.getElementById('wizardBackBtn'),
+                    wizardNextBtn: document.getElementById('wizardNextBtn'),
+                    wizardSaveBtn: document.getElementById('wizardSaveBtn'),
+                    wizardCancelBtn: document.getElementById('wizardCancelBtn'),
+                    wizardCopyPromptBtn: document.getElementById('wizardCopyPromptBtn'),
+                    wizardScriptNameError: document.getElementById('wizardScriptNameError'),
+                    wizardScriptDescriptionError: document.getElementById('wizardScriptDescriptionError'),
+                    wizardPastedCodeError: document.getElementById('wizardPastedCodeError'),
+                };
+
+                 // --- State --- (Loaded/Saved)
+                 this.state = this.getDefaultState(); // Initialize with defaults
+
+                this.bindEvents();
+                this.checkWebSerialSupport();
+                this.loadThemePreference();
+                this.loadState(); // Load from localStorage or defaults (overwrites initial defaults if found)
+                this.updateUIFromState(); // Update UI based on final loaded/default state
+                this.debouncedSaveState = debounce(this.saveState.bind(this), 1000); // Debounce auto-save
+            }
+
+             // --- Basic UI & State ---
+
+             getDefaultState() {
+                 // Returns a clean default state object
+                 return {
+                     projectName: "Untitled Project",
+                     // Serial Settings
+                     baudRate: 115200,
+                     dataBits: 8,
+                     stopBits: 1,
+                     parity: 'none',
+                     // TX/RX/Script Config
+                     txCommands: [], // { name: string, hex: string, description: string }
+                     rxCmdBytePos: 1,
+                     rxCmdMap: {}, // { 'HEXVAL': 'description', ... } (Store hex value as string key - MUST BE PADDED e.g., '0A')
+                     rxDelimiterHex: '0A',
+                     rxUseDelimiter: true,
+                     scripts: [], // { name: string, code: string, description: string }
+                 };
+             }
+
+
+            updateUIFromState() {
+                this.setProjectName(this.state.projectName); // Use setter to update UI and title
+                // Serial Settings
+                this.dom.baudRateSelect.value = this.state.baudRate;
+                this.dom.dataBitsSelect.value = this.state.dataBits;
+                this.dom.stopBitsSelect.value = this.state.stopBits;
+                this.dom.paritySelect.value = this.state.parity;
+
+                // Other Settings
+                this.dom.cmdBytePosInput.value = this.state.rxCmdBytePos;
+                this.dom.delimiterHexInput.value = this.state.rxDelimiterHex;
+                this.dom.useDelimiterCheckbox.checked = this.state.rxUseDelimiter;
+
+                this.renderTxCommandList();
+                this.renderRxDefinitionList(); // Use new render function
+                this.renderScriptList();
+                this.applyTheme(); // Apply loaded theme
+                this.updateConnectionStatusUI(); // Reflect potentially stored disconnected state
+            }
+
+            setProjectName(name) {
+                this.state.projectName = name || "Untitled Project";
+                this.dom.projectNameSpan.textContent = this.state.projectName;
+                this.dom.projectNameSpan.title = this.state.projectName; // Tooltip for long names
+                // No need to call save state here, it happens when project is loaded/saved explicitly
+            }
+
+            log(direction, data, description = '', dataUint8Array = null) {
+                const timestamp = getTimestamp();
+                let formattedData = '';
+                let hexData = '';
+                let effectiveDirection = direction.toUpperCase(); // Normalize
+
+                if (dataUint8Array) {
+                    hexData = uint8ArrayToHexString(dataUint8Array);
+                    if (effectiveDirection === 'RX') {
+                        formattedData = formatReceivedData(dataUint8Array);
+                    } else { // TX, SCRIPT, SYS usually have pre-formatted 'data'
+                        formattedData = data || hexData; // Use provided data if exists, else hex
+                    }
+                } else {
+                    formattedData = String(data); // Ensure data is string
+                    // Attempt to get hex if data looks like hex (for TX primarily)
+                    if (effectiveDirection === 'TX' && isValidHex(formattedData)) {
+                         hexData = formattedData;
+                    }
+                }
+
+
+                const logEntry = { timestamp, direction: effectiveDirection, data: formattedData, description, hex: hexData };
+                this.logEntries.push(logEntry);
+
+                // Trim log if it exceeds the limit
+                while (this.logEntries.length > MAX_LOG_ENTRIES) {
+                    this.logEntries.shift(); // Remove the oldest entry
+                }
+
+                this.renderLogEntry(logEntry);
+            }
+
+            renderLogEntry(entry) {
+                const logLine = document.createElement('div');
+                logLine.className = 'log-entry';
+
+                const tsSpan = document.createElement('span');
+                tsSpan.className = 'timestamp';
+                tsSpan.textContent = entry.timestamp;
+
+                const dirClass = entry.direction.toLowerCase();
+                const dirSpan = document.createElement('span');
+                dirSpan.className = `direction direction-${dirClass}`;
+                dirSpan.textContent = `${entry.direction}:`;
+
+                const dataSpan = document.createElement('span');
+                dataSpan.className = `data data-${dirClass}`;
+                dataSpan.textContent = escapeHtml(entry.data); // Display formatted/escaped data
+                if (entry.hex) {
+                    dataSpan.title = `Hex: ${entry.hex}`; // Tooltip shows raw hex
+                }
+
+                logLine.appendChild(tsSpan);
+                logLine.appendChild(dirSpan);
+                logLine.appendChild(dataSpan);
+
+                if (entry.description) {
+                    const descSpan = document.createElement('span');
+                    descSpan.className = 'description';
+                    descSpan.textContent = ` [${escapeHtml(entry.description)}]`;
+                    logLine.appendChild(descSpan);
+                }
+
+                this.dom.logDisplay.appendChild(logLine);
+
+                // Auto-scroll to bottom, but only if user isn't scrolled up
+                 const isScrolledToBottom = this.dom.logDisplay.scrollHeight - this.dom.logDisplay.clientHeight <= this.dom.logDisplay.scrollTop + 1; // +1 for tolerance
+                 if (isScrolledToBottom) {
+                     this.dom.logDisplay.scrollTop = this.dom.logDisplay.scrollHeight;
+                 }
+            }
+
+            clearLog() {
+                this.logEntries = [];
+                this.dom.logDisplay.innerHTML = ''; // Clear display
+                 this.log('SYS', 'Log cleared.');
+            }
+
+            copyLog() {
+                const logText = this.logEntries.map(entry => {
+                    let line = `${entry.timestamp} ${entry.direction}: ${entry.data}`;
+                    if(entry.hex) line += ` (Hex: ${entry.hex})`;
+                    if (entry.description) line += ` [${entry.description}]`;
+                    return line;
+                }).join('\n');
+
+                navigator.clipboard.writeText(logText)
+                    .then(() => this.log('SYS', 'Log copied to clipboard.'))
+                    .catch(err => {
+                        console.error('Failed to copy log:', err);
+                        this.log('SYS', 'Error copying log to clipboard.', 'Error');
+                    });
+            }
+
+            saveLogToFile() {
+                 const logText = this.logEntries.map(entry => {
+                    let line = `${entry.timestamp} ${entry.direction}: ${entry.data}`;
+                     if (entry.hex) line += ` (Hex: ${entry.hex})`; // Include hex in saved file
+                    if (entry.description) line += ` [${entry.description}]`;
+                    return line;
+                }).join('\n');
+
+                 const blob = new Blob([logText], { type: 'text/plain;charset=utf-8' });
+                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                 const filename = `webserial_log_${timestamp}.log`;
+
+                 const link = document.createElement('a');
+                 link.href = URL.createObjectURL(blob);
+                 link.download = filename;
+                 link.style.display = 'none';
+                 document.body.appendChild(link);
+                 link.click();
+                 document.body.removeChild(link);
+                 URL.revokeObjectURL(link.href); // Clean up
+
+                 this.log('SYS', `Log saved as ${filename}`);
+            }
+
+            loadThemePreference() {
+                const savedTheme = localStorage.getItem(LOCAL_STORAGE_KEY_THEME);
+                if (savedTheme) {
+                    this.dom.logThemeSelect.value = savedTheme;
+                }
+                 this.applyTheme(); // Apply the loaded or default theme
+            }
+
+            applyTheme() {
+                 const selectedTheme = this.dom.logThemeSelect.value;
+                 this.dom.logDisplay.classList.remove('log-theme-default', 'log-theme-dark', 'log-theme-light', 'log-theme-highcontrast');
+                 this.dom.logDisplay.classList.add(selectedTheme);
+                 localStorage.setItem(LOCAL_STORAGE_KEY_THEME, selectedTheme); // Save preference
+            }
+
+             // --- Web Serial API ---
+
+            checkWebSerialSupport() {
+                if (!("serial" in navigator)) {
+                    this.dom.webSerialWarning.innerHTML = '<span class="direction direction-error">ERR:</span><span class="data data-error">Web Serial API not supported in this browser. Try Chrome, Edge, or Opera (Desktop).</span>';
+                    this.dom.connectBtn.disabled = true;
+                    this.log('SYS', 'Web Serial API not supported!', 'Error');
+                    console.error("Web Serial API not supported.");
+                } else {
+                    this.dom.webSerialWarning.innerHTML = ''; // Clear warning if supported
+                     this.log('SYS', 'Web Serial API detected.');
+                }
+            }
+
+            async connect() {
+                if (!("serial" in navigator)) {
+                    this.log('SYS', 'Web Serial API not supported.', 'Error');
+                    return;
+                }
+                if (this.port) {
+                    this.log('SYS', 'Already connected or connecting.', 'Warning');
+                    return;
+                }
+
+                this.updateConnectionStatusUI('connecting', 'Requesting port...');
+                try {
+                    this.port = await navigator.serial.requestPort();
+                    this.updateConnectionStatusUI('connecting', 'Opening port...');
+
+                    // Read settings from state
+                    const connectOptions = {
+                        baudRate: this.state.baudRate,
+                        dataBits: this.state.dataBits,
+                        stopBits: this.state.stopBits,
+                        parity: this.state.parity,
+                        bufferSize: 8192, // Default 255, increase for potentially better performance
+                    };
+
+                    await this.port.open(connectOptions);
+
+                    // Get port info if available (might be null)
+                    const portInfo = this.port.getInfo();
+                    const portName = portInfo.usbVendorId ? `USB VID:0x${portInfo.usbVendorId.toString(16)} PID:0x${portInfo.usbProductId.toString(16)}` : "Selected Port";
+
+                    this.updateConnectionStatusUI('connected', `Connected to ${portName}`); // Status update handles params display
+                    this.log('SYS', `Port opened successfully (${portName}). Settings: ${this.getConnectionParamsString()}`);
+
+                    // Handle disconnects initiated by the device
+                    this.port.addEventListener('disconnect', (event) => {
+                         console.warn("Device disconnected event:", event);
+                         this.log('SYS', 'Device disconnected.', 'Warning');
+                         this.handleDisconnect(false); // Don't try to close already closed port
+                    });
+
+                    this.keepReading = true;
+                    this.writer = this.port.writable.getWriter();
+                    this.readLoop(); // Start reading in background
+
+                } catch (error) {
+                    console.error("Connection failed:", error);
+                     let errorMsg = error.message;
+                     if (error.name === 'NotFoundError') {
+                         errorMsg = 'No port selected.';
+                     }
+                    this.updateConnectionStatusUI('error', `Error: ${errorMsg}`);
+                    this.log('SYS', `Connection failed: ${errorMsg}`, 'Error');
+                    this.port = null; // Ensure port is null on failure
+                }
+            }
+
+            async readLoop() {
+                if (!this.port || !this.port.readable) {
+                    console.warn("Read loop started without readable port.");
+                    return;
+                }
+
+                this.reader = this.port.readable.getReader();
+                const delimiterBytes = (this.state.rxUseDelimiter && this.state.rxDelimiterHex) ? hexStringToUint8Array(this.state.rxDelimiterHex) : null;
+                this.rxBuffer = new Uint8Array(0); // Clear buffer on new connection/read loop start
+
+                try {
+                    while (this.keepReading && this.port.readable) {
+                        let value, done;
+                        try {
+                             ({ value, done } = await this.reader.read());
+                        } catch (readError) {
+                            console.error("Error reading from serial port:", readError);
+                            this.log('SYS', `Read error: ${readError.message}`, 'Error');
+                             this.keepReading = false; // Stop loop on read error
+                             if (!this.port?.readable) {
+                                 this.handleDisconnect(false);
+                             }
+                             break;
+                        }
+
+                        if (done) {
+                            console.log("Reader done (likely disconnected).");
+                            break;
+                        }
+
+                        if (value && value.length > 0) {
+                            const newData = new Uint8Array(this.rxBuffer.length + value.length);
+                            newData.set(this.rxBuffer);
+                            newData.set(value, this.rxBuffer.length);
+                            this.rxBuffer = newData;
+
+                            if (this.state.rxUseDelimiter && delimiterBytes && delimiterBytes.length > 0) {
+                                let delimiterIndex;
+                                while ((delimiterIndex = this.findDelimiterIndex(this.rxBuffer, delimiterBytes)) !== -1) {
+                                    const messageEndIndex = delimiterIndex + delimiterBytes.length;
+                                    const message = this.rxBuffer.slice(0, messageEndIndex);
+                                    this.rxBuffer = this.rxBuffer.slice(messageEndIndex);
+                                    this.processReceivedMessage(message);
+                                }
+                                if (this.rxBuffer.length > 1024 * 16) { // 16KB threshold
+                                    console.warn("RX buffer large, possible missing delimiter. Logging partial data.");
+                                    this.log('SYS', `Buffer exceeded limit (${this.rxBuffer.length} bytes). Logging partial data. Check delimiter?`, 'Warning');
+                                    this.processReceivedMessage(this.rxBuffer.slice(0, 1024));
+                                    this.rxBuffer = this.rxBuffer.slice(1024);
+                                }
+                            } else {
+                                this.processReceivedMessage(this.rxBuffer);
+                                this.rxBuffer = new Uint8Array();
+                            }
+                        }
+                    }
+                } catch (error) {
+                     console.error("Error in read loop:", error);
+                     this.log('SYS', `Error in read loop: ${error.message}`, 'Error');
+                     this.keepReading = false;
+                      if (this.port) {
+                         this.handleDisconnect(true);
+                      }
+                } finally {
+                     if (this.reader) {
+                         try {
+                             if (!this.keepReading || !this.port?.readable) {
+                                 await this.reader.cancel();
+                                 this.log('SYS','Read operation cancelled.');
+                             }
+                             this.reader.releaseLock();
+                         } catch (cancelError) {
+                            if (cancelError.name !== 'TypeError' || !cancelError.message.includes("null")) {
+                                 console.warn("Error cancelling/releasing reader lock:", cancelError);
+                             }
+                         }
+                         this.reader = null;
+                         console.log("Reader released.");
+                     }
+                      this.rxBuffer = new Uint8Array(0);
+                }
+            }
+
+             // Helper to find the first occurrence of a delimiter sequence in a buffer
+            findDelimiterIndex(buffer, delimiter) {
+                if (!delimiter || delimiter.length === 0 || buffer.length < delimiter.length) return -1;
+                for (let i = 0; i <= buffer.length - delimiter.length; i++) {
+                    let found = true;
+                    for (let j = 0; j < delimiter.length; j++) {
+                        if (buffer[i + j] !== delimiter[j]) {
+                            found = false;
+                            break;
+                        }
+                    }
+                    if (found) return i;
+                 }
+                 return -1;
+            }
+
+            processReceivedMessage(messageUint8Array) {
+                 let description = this.getRxDescription(messageUint8Array); // Get description based on mapping
+                 this.log('RX', null, description, messageUint8Array); // Log with description if found
+                 this.checkPendingWaits(messageUint8Array); // Handle Script Waits
+            }
+
+            async write(dataUint8Array, description = '') {
+                if (!this.writer) {
+                    this.log('SYS', 'Cannot write: Not connected.', 'Error');
+                    console.error("Writer not available.");
+                    return false; // Indicate failure
+                }
+                try {
+                    await this.writer.write(dataUint8Array);
+                    this.log('TX', uint8ArrayToHexString(dataUint8Array), description, dataUint8Array);
+                    return true; // Indicate success
+                } catch (error) {
+                    console.error("Write error:", error);
+                    this.log('SYS', `Write error: ${error.message}`, 'Error');
+                    if (error.message.includes("transfer timed out") || error.message.includes("NetworkError") || error.name === 'NetworkError') {
+                       this.handleDisconnect(true);
+                    }
+                    return false; // Indicate failure
+                }
+            }
+
+            async disconnect() {
+                 if (!this.port) {
+                     this.log('SYS', 'Already disconnected.', 'Info');
+                     return;
+                 }
+                 this.log('SYS', 'Disconnecting...');
+                 this.keepReading = false; // Signal read loop to stop
+                 this.rejectAllPendingWaits('Disconnected'); // Clear any script waits
+
+                 if (this.reader) {
+                     try {
+                         await this.reader.cancel();
+                         this.reader.releaseLock();
+                         this.reader = null;
+                         console.log("Reader cancelled and released.");
+                     } catch (e) {
+                         console.warn("Error cancelling/releasing reader:", e);
+                          try { this.reader?.releaseLock(); } catch (e2) {/* ignore */}
+                         this.reader = null;
+                     }
+                 }
+
+                 if (this.writer) {
+                    try {
+                        this.writer.releaseLock();
+                        console.log("Writer released.");
+                    } catch (e) { console.warn("Error releasing writer lock:", e); }
+                     this.writer = null;
+                 }
+
+                 let closeError = null;
+                 try {
+                     await this.port.close();
+                     console.log("Port closed.");
+                 } catch (error) {
+                    console.error("Error closing port:", error);
+                    closeError = error; // Store error to log after UI update
+                 } finally {
+                     this.port = null; // Set port to null regardless of close success/failure
+                 }
+
+                 this.updateConnectionStatusUI('disconnected');
+                 this.log('SYS', 'Connection closed.');
+                 if (closeError) {
+                    this.log('SYS', `Error during port close: ${closeError.message}`, 'Warning');
+                 }
+                 this.rxBuffer = new Uint8Array(0);
+             }
+
+            // Centralized disconnect handling
+             async handleDisconnect(attemptClose) {
+                 if (!this.port && !this.keepReading && !this.writer && !this.reader) {
+                      return; // Already handled
+                 }
+                 this.keepReading = false;
+                 this.rejectAllPendingWaits('Disconnected');
+
+                 if (this.reader) {
+                     try {
+                         await this.reader.cancel();
+                         this.reader.releaseLock();
+                     } catch(e) {/* ignore */}
+                     this.reader = null;
+                 }
+                 if (this.writer) {
+                    try { this.writer.releaseLock(); } catch (e) { /* Ignore */ }
+                    this.writer = null;
+                 }
+
+                 if (attemptClose && this.port) {
+                     const portToClose = this.port;
+                     this.port = null;
+                     portToClose.close()
+                         .catch(e => console.warn("Error closing port on handleDisconnect:", e))
+                         .finally(() => {
+                             this.updateConnectionStatusUI('disconnected');
+                         });
+                 } else {
+                     this.port = null;
+                     this.updateConnectionStatusUI('disconnected');
+                 }
+                  this.rxBuffer = new Uint8Array(0);
+             }
+
+             getConnectionParamsString() {
+                const parityMap = { 'none': 'N', 'even': 'E', 'odd': 'O' };
+                return `${this.state.baudRate}, ${this.state.dataBits}${parityMap[this.state.parity]}${this.state.stopBits}`;
+             }
+
+            updateConnectionStatusUI(status = null, message = null) {
+                 const currentStatus = this.port ? 'connected' : (this.dom.statusSpan.classList.contains('connecting') ? 'connecting' : 'disconnected');
+                 const newStatus = status || currentStatus;
+
+                 let isConnected = false;
+                 let showParams = false;
+
+                 if (message === null) {
+                     switch (newStatus) {
+                         case 'connected':
+                              const portInfo = this.port?.getInfo() || {};
+                              const portName = portInfo.usbVendorId ? `USB VID:0x${portInfo.usbVendorId.toString(16)} PID:0x${portInfo.usbProductId.toString(16)}` : "Port";
+                             message = `Connected to ${portName}`;
+                             break;
+                         case 'connecting': message = 'Connecting...'; break;
+                         case 'error': message = this.dom.statusSpan.textContent; break;
+                         case 'disconnected': default: message = 'Disconnected'; break;
+                     }
+                 }
+
+                this.dom.statusSpan.textContent = message;
+                this.dom.statusSpan.className = 'connection-status';
+                this.dom.connectBtn.disabled = false;
+                this.dom.disconnectBtn.disabled = true;
+
+                const disableSettings = (newStatus === 'connected' || newStatus === 'connecting');
+                this.dom.baudRateSelect.disabled = disableSettings;
+                this.dom.dataBitsSelect.disabled = disableSettings;
+                this.dom.stopBitsSelect.disabled = disableSettings;
+                this.dom.paritySelect.disabled = disableSettings;
+
+                switch (newStatus) {
+                    case 'connected':
+                        this.dom.statusSpan.classList.add('connected');
+                        this.dom.connectBtn.classList.add('hidden');
+                        this.dom.disconnectBtn.classList.remove('hidden');
+                        this.dom.disconnectBtn.disabled = false;
+                        isConnected = true;
+                        showParams = true;
+                        break;
+                    case 'connecting':
+                        this.dom.statusSpan.classList.add('connecting');
+                        this.dom.connectBtn.disabled = true;
+                        this.dom.disconnectBtn.classList.add('hidden');
+                        isConnected = false;
+                        showParams = false;
+                        break;
+                    case 'error':
+                        this.dom.statusSpan.classList.add('error');
+                        this.dom.connectBtn.classList.remove('hidden');
+                        this.dom.disconnectBtn.classList.add('hidden');
+                        isConnected = false;
+                        showParams = false;
+                        break;
+                    case 'disconnected':
+                    default:
+                         this.dom.statusSpan.classList.remove('connected', 'connecting', 'error');
+                         this.dom.connectBtn.classList.remove('hidden');
+                         this.dom.disconnectBtn.classList.add('hidden');
+                         isConnected = false;
+                         showParams = false;
+                        break;
+                }
+
+                if (showParams) {
+                    this.dom.connParamsDisplay.textContent = this.getConnectionParamsString();
+                    this.dom.connParamsDisplay.classList.remove('hidden');
+                } else {
+                    this.dom.connParamsDisplay.classList.add('hidden');
+                    this.dom.connParamsDisplay.textContent = '';
+                }
+
+                 this.updateSendButtonStates(isConnected);
+            }
+
+             // --- TX Command Management ---
+
+            renderTxCommandList() {
+                this.dom.txCmdList.innerHTML = ''; // Clear existing list
+                if (!this.state.txCommands || this.state.txCommands.length === 0) {
+                     this.dom.txCmdList.innerHTML = '<li><span class="item-details" style="color: #777;">No commands defined yet.</span></li>';
+                 } else {
+                     this.state.txCommands.forEach(cmd => {
+                         const li = document.createElement('li');
+                         li.dataset.commandName = cmd.name;
+
+                         const detailsSpan = document.createElement('span');
+                         detailsSpan.className = 'item-details';
+
+                         const nameSpan = document.createElement('span');
+                         nameSpan.className = 'item-secondary'; // Use secondary style for name
+                         nameSpan.textContent = cmd.name;
+                         let title = `Name: ${cmd.name} | Hex: ${cmd.hex}`;
+                         if(cmd.description) title += ` | Desc: ${cmd.description}`;
+                         nameSpan.title = title;
+
+                         detailsSpan.appendChild(nameSpan); // Can add more details here if needed
+
+                         const actionsSpan = document.createElement('span');
+                         actionsSpan.className = 'item-actions';
+
+                         const sendBtn = document.createElement('button');
+                         sendBtn.className = 'action small';
+                         sendBtn.textContent = 'Send';
+                         sendBtn.dataset.cmdName = cmd.name;
+                         sendBtn.onclick = (e) => this.handleSendTxCommand(e.target.dataset.cmdName);
+                         sendBtn.disabled = !this.port;
+
+                         const editBtn = document.createElement('button');
+                          editBtn.className = 'subtle small';
+                          editBtn.textContent = 'Edit';
+                          editBtn.dataset.cmdName = cmd.name;
+                          editBtn.onclick = (e) => this.handleEditTxCommand(e.target.dataset.cmdName);
+
+                         const delBtn = document.createElement('button');
+                         delBtn.className = 'warning small';
+                         delBtn.textContent = 'Del';
+                         delBtn.dataset.cmdName = cmd.name;
+                         delBtn.onclick = (e) => this.handleDeleteTxCommand(e.target.dataset.cmdName);
+
+                         actionsSpan.appendChild(sendBtn);
+                         actionsSpan.appendChild(editBtn);
+                         actionsSpan.appendChild(delBtn);
+                         li.appendChild(detailsSpan); // Changed from nameSpan
+                         li.appendChild(actionsSpan);
+                         this.dom.txCmdList.appendChild(li);
+                     });
+                 }
+                 this.updateSendButtonStates();
+            }
+
+             updateSendButtonStates(isConnected = !!this.port) {
+                 this.dom.txCmdList.querySelectorAll('.item-actions button.action').forEach(btn => {
+                     btn.disabled = !isConnected;
+                 });
+                 this.dom.scriptList.querySelectorAll('.item-actions button.action').forEach(btn => {
+                     btn.disabled = !isConnected;
+                 });
+             }
+
+            showAddTxCommandForm(editCmdName = null) {
+                 this.clearValidation(this.dom.addTxCmdForm);
+                 this.dom.txCmdNameUniqueError.classList.add('hidden');
+
+                if (editCmdName) {
+                     const cmd = this.state.txCommands.find(c => c.name === editCmdName);
+                     if (cmd) {
+                         this.dom.addTxCmdForm.querySelector('legend').textContent = "Edit TX Command";
+                         this.dom.txCmdEditNameInput.value = cmd.name;
+                         this.dom.txCmdNameInput.value = cmd.name;
+                         this.dom.txCmdDataHexInput.value = cmd.hex;
+                         this.dom.txCmdDescInput.value = cmd.description || '';
+                     } else {
+                         console.error("Command to edit not found:", editCmdName);
+                         this.log('SYS', `Cannot edit TX command '${editCmdName}', not found.`, 'Error');
+                         return;
+                     }
+                 } else {
+                     this.dom.addTxCmdForm.querySelector('legend').textContent = "Create New TX Command";
+                     this.dom.txCmdEditNameInput.value = '';
+                     this.dom.txCmdNameInput.value = '';
+                     this.dom.txCmdDataHexInput.value = '';
+                     this.dom.txCmdDescInput.value = '';
+                 }
+                 this.dom.addTxCmdForm.classList.remove('hidden');
+                 this.dom.txCmdNameInput.focus();
+                 // Hide RX form if open
+                 this.hideAddRxDefForm();
+            }
+
+            hideAddTxCommandForm() {
+                this.dom.addTxCmdForm.classList.add('hidden');
+                this.dom.txCmdEditNameInput.value = '';
+                this.dom.txCmdNameInput.value = '';
+                this.dom.txCmdDataHexInput.value = '';
+                this.dom.txCmdDescInput.value = '';
+                this.clearValidation(this.dom.addTxCmdForm);
+                this.dom.txCmdNameUniqueError.classList.add('hidden');
+            }
+
+            validateTxCommandForm(isEditing = false, originalName = '') {
+                 let isValid = true;
+                 this.clearValidation(this.dom.addTxCmdForm);
+                 this.dom.txCmdNameUniqueError.classList.add('hidden');
+
+                 const name = this.dom.txCmdNameInput.value.trim();
+                 const hex = this.dom.txCmdDataHexInput.value.trim();
+
+                 if (!name) {
+                     this.showValidationError(this.dom.txCmdNameInput, 'Name is required.');
+                     isValid = false;
+                 } else {
+                      const nameExists = this.state.txCommands.some(cmd => cmd.name === name);
+                      if (nameExists && (!isEditing || name !== originalName)) {
+                          this.showValidationError(this.dom.txCmdNameInput, 'Name must be unique.', this.dom.txCmdNameUniqueError);
+                          isValid = false;
+                      }
+                 }
+
+                 if (!hex) {
+                     this.showValidationError(this.dom.txCmdDataHexInput, 'Hex Data is required.');
+                     isValid = false;
+                 } else if (!isValidHex(hex)) {
+                     this.showValidationError(this.dom.txCmdDataHexInput, 'Invalid Hex format. Use pairs like \'0A\', \'FF\', separated by spaces.');
+                     isValid = false;
+                 }
+
+                 return isValid;
+            }
+
+            saveTxCommand() {
+                const originalName = this.dom.txCmdEditNameInput.value;
+                const isEditing = !!originalName;
+
+                 if (!this.validateTxCommandForm(isEditing, originalName)) {
+                     return;
+                 }
+
+                const newCmd = {
+                    name: this.dom.txCmdNameInput.value.trim(),
+                    hex: this.dom.txCmdDataHexInput.value.trim().toUpperCase(),
+                    description: this.dom.txCmdDescInput.value.trim()
+                };
+
+                if (isEditing) {
+                     const index = this.state.txCommands.findIndex(cmd => cmd.name === originalName);
+                     if (index !== -1) {
+                         this.state.txCommands[index] = newCmd;
+                          this.log('SYS', `TX Command '${newCmd.name}' updated.`);
+                     } else {
+                         console.error("Original command not found for editing:", originalName);
+                         this.log('SYS', `Error updating command '${originalName}'. Not found.`, 'Error');
+                         this.hideAddTxCommandForm();
+                         return;
+                     }
+                 } else {
+                     this.state.txCommands.push(newCmd);
+                     this.log('SYS', `TX Command '${newCmd.name}' added.`);
+                 }
+
+                 this.state.txCommands.sort((a, b) => a.name.localeCompare(b.name));
+                 this.renderTxCommandList();
+                 this.hideAddTxCommandForm();
+                 this.debouncedSaveState();
+            }
+
+            handleSendTxCommand(cmdName) {
+                 const cmd = this.state.txCommands.find(c => c.name === cmdName);
+                 if (cmd && this.port) {
+                     const dataBytes = hexStringToUint8Array(cmd.hex);
+                     this.write(dataBytes, cmd.name);
+                 } else if (!this.port) {
+                     this.log('SYS', `Cannot send '${cmdName}': Not connected.`, 'Warning');
+                 } else {
+                      this.log('SYS', `Command '${cmdName}' not found.`, 'Error');
+                 }
+            }
+
+             handleEditTxCommand(cmdName) {
+                 this.showAddTxCommandForm(cmdName);
+             }
+
+            handleDeleteTxCommand(cmdName) {
+                if (confirm(`Are you sure you want to delete the TX command "${cmdName}"?`)) {
+                    this.state.txCommands = this.state.txCommands.filter(cmd => cmd.name !== cmdName);
+                    this.renderTxCommandList();
+                    this.debouncedSaveState();
+                    this.log('SYS', `TX Command '${cmdName}' deleted.`);
+                }
+            }
+
+             // --- RX Definition Management (NEW STRUCTURE) ---
+
+            renderRxDefinitionList() {
+                this.dom.rxDefList.innerHTML = ''; // Clear existing list
+                const mapEntries = Object.entries(this.state.rxCmdMap || {});
+
+                if (mapEntries.length === 0) {
+                     this.dom.rxDefList.innerHTML = '<li><span class="item-details" style="color: #777;">No definitions yet.</span></li>';
+                 } else {
+                    // Sort by Hex Value (string comparison works for hex)
+                    mapEntries.sort(([hexA], [hexB]) => hexA.localeCompare(hexB));
+
+                    mapEntries.forEach(([hexValue, description]) => {
+                        const li = document.createElement('li');
+                        li.dataset.hexValue = hexValue; // Store hex value (already padded)
+
+                        const detailsSpan = document.createElement('span');
+                        detailsSpan.className = 'item-details';
+
+                        const valueSpan = document.createElement('span');
+                        valueSpan.className = 'item-primary'; // Primary style for Hex Value
+                        valueSpan.textContent = hexValue;
+
+                        const descSpan = document.createElement('span');
+                        descSpan.className = 'item-secondary'; // Secondary style for Description
+                        descSpan.textContent = description;
+                        descSpan.title = description; // Tooltip for full description
+
+                        detailsSpan.appendChild(valueSpan);
+                        detailsSpan.appendChild(descSpan);
+
+                        const actionsSpan = document.createElement('span');
+                        actionsSpan.className = 'item-actions';
+
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'subtle small';
+                        editBtn.textContent = 'Edit';
+                        editBtn.dataset.hexValue = hexValue;
+                        editBtn.onclick = (e) => this.handleEditRxDefinition(e.target.dataset.hexValue);
+
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'warning small';
+                        delBtn.textContent = 'Del';
+                        delBtn.dataset.hexValue = hexValue;
+                        delBtn.onclick = (e) => this.handleDeleteRxDefinition(e.target.dataset.hexValue);
+
+                        actionsSpan.appendChild(editBtn);
+                        actionsSpan.appendChild(delBtn);
+                        li.appendChild(detailsSpan);
+                        li.appendChild(actionsSpan);
+                        this.dom.rxDefList.appendChild(li);
+                    });
+                 }
+            }
+
+            showAddRxDefForm(editHexValue = null) {
+                 this.clearValidation(this.dom.addRxDefForm);
+                 this.dom.rxDefValueUniqueError.classList.add('hidden');
+                 const isEditing = !!editHexValue;
+
+                if (isEditing) {
+                     const description = this.state.rxCmdMap[editHexValue]; // Assuming editHexValue is already padded
+                     if (description !== undefined) {
+                         this.dom.addRxDefForm.querySelector('legend').textContent = "Edit RX Definition";
+                         this.dom.rxDefEditValueInput.value = editHexValue; // Store original padded hex value
+                         this.dom.rxDefValueHexInput.value = editHexValue;
+                         this.dom.rxDefDescriptionInput.value = description;
+                         this.dom.rxDefValueHexInput.disabled = true; // Prevent changing Hex value when editing
+                     } else {
+                         console.error("Definition to edit not found:", editHexValue);
+                         this.log('SYS', `Cannot edit RX definition '${editHexValue}', not found.`, 'Error');
+                         return; // Don't show form if definition doesn't exist
+                     }
+                 } else {
+                     this.dom.addRxDefForm.querySelector('legend').textContent = "Create New RX Definition";
+                     this.dom.rxDefEditValueInput.value = ''; // Clear edit flag
+                     this.dom.rxDefValueHexInput.value = '';
+                     this.dom.rxDefDescriptionInput.value = '';
+                     this.dom.rxDefValueHexInput.disabled = false; // Enable hex input for new entries
+                 }
+                 this.dom.addRxDefForm.classList.remove('hidden');
+                 this.dom.rxDefValueHexInput.focus();
+                 // Hide TX form if open
+                 this.hideAddTxCommandForm();
+            }
+
+            hideAddRxDefForm() {
+                this.dom.addRxDefForm.classList.add('hidden');
+                this.dom.rxDefEditValueInput.value = '';
+                this.dom.rxDefValueHexInput.value = '';
+                this.dom.rxDefDescriptionInput.value = '';
+                this.dom.rxDefValueHexInput.disabled = false; // Ensure hex input is enabled by default when hidden
+                this.clearValidation(this.dom.addRxDefForm);
+                this.dom.rxDefValueUniqueError.classList.add('hidden');
+            }
+
+            validateRxDefForm(isEditing = false, originalHexValue = '') {
+                 let isValid = true;
+                 this.clearValidation(this.dom.addRxDefForm);
+                 this.dom.rxDefValueUniqueError.classList.add('hidden');
+
+                 const hexValue = this.dom.rxDefValueHexInput.value.trim();
+                 const description = this.dom.rxDefDescriptionInput.value.trim();
+                 const paddedHexValue = padHexByte(hexValue); // Always work with padded value
+
+                 if (!hexValue) {
+                     this.showValidationError(this.dom.rxDefValueHexInput, 'Hex Value is required.');
+                     isValid = false;
+                 } else if (!isValidHexByte(hexValue)) {
+                     this.showValidationError(this.dom.rxDefValueHexInput, 'Invalid Hex format (1-2 chars).');
+                     isValid = false;
+                 } else {
+                      // Check uniqueness ONLY if adding new, or if hex changed (though we disable hex editing)
+                      if (!isEditing && this.state.rxCmdMap.hasOwnProperty(paddedHexValue)) {
+                           this.showValidationError(this.dom.rxDefValueHexInput, 'Hex value must be unique.', this.dom.rxDefValueUniqueError);
+                           isValid = false;
+                      }
+                      // If editing and hex changed (shouldn't happen with disabled input, but check anyway)
+                       else if (isEditing && paddedHexValue !== originalHexValue && this.state.rxCmdMap.hasOwnProperty(paddedHexValue)) {
+                           this.showValidationError(this.dom.rxDefValueHexInput, 'Hex value must be unique.', this.dom.rxDefValueUniqueError);
+                           isValid = false;
+                       }
+                 }
+
+                 if (!description) {
+                     this.showValidationError(this.dom.rxDefDescriptionInput, 'Description is required.');
+                     isValid = false;
+                 }
+
+                 return isValid;
+            }
+
+            saveRxDefinition() {
+                const originalHexValue = this.dom.rxDefEditValueInput.value; // This is already padded
+                const isEditing = !!originalHexValue;
+
+                 if (!this.validateRxDefForm(isEditing, originalHexValue)) {
+                     return; // Stop if validation fails
+                 }
+
+                const newHexValue = this.dom.rxDefValueHexInput.value.trim();
+                const paddedNewHexValue = padHexByte(newHexValue); // Ensure padded
+                const newDescription = this.dom.rxDefDescriptionInput.value.trim();
+
+                // Add/update the entry in the state map
+                this.state.rxCmdMap[paddedNewHexValue] = newDescription;
+
+                if (isEditing) {
+                    // If hex value WAS changed (e.g., if we re-enable editing later), delete old one
+                    if (paddedNewHexValue !== originalHexValue && this.state.rxCmdMap.hasOwnProperty(originalHexValue)) {
+                         delete this.state.rxCmdMap[originalHexValue];
+                         this.log('SYS', `RX Definition key changed from '${originalHexValue}' to '${paddedNewHexValue}'.`);
+                    }
+                     this.log('SYS', `RX Definition '${paddedNewHexValue}' updated.`);
+                 } else {
+                     this.log('SYS', `RX Definition '${paddedNewHexValue}': '${newDescription}' added.`);
+                 }
+
+                 this.renderRxDefinitionList(); // Re-render the updated list
+                 this.hideAddRxDefForm(); // Hide the form
+                 this.debouncedSaveState(); // Save state changes
+            }
+
+            handleEditRxDefinition(hexValue) {
+                // hexValue comes from the button's dataset, should be padded already
+                 this.showAddRxDefForm(hexValue);
+            }
+
+            handleDeleteRxDefinition(hexValue) {
+                 // hexValue comes from the button's dataset, should be padded already
+                const description = this.state.rxCmdMap[hexValue] || 'Unknown';
+                if (confirm(`Are you sure you want to delete the RX Definition for "${hexValue}" ("${description}")?`)) {
+                    if (this.state.rxCmdMap.hasOwnProperty(hexValue)) {
+                        delete this.state.rxCmdMap[hexValue];
+                        this.renderRxDefinitionList();
+                        this.debouncedSaveState();
+                        this.log('SYS', `RX Definition '${hexValue}' deleted.`);
+                    } else {
+                         console.warn("Attempted to delete non-existent RX definition:", hexValue);
+                         this.renderRxDefinitionList(); // Re-render anyway to ensure consistency
+                    }
+                }
+            }
+
+            // --- Serial Settings Update ---
+            updateSerialSettingsState() {
+                this.state.baudRate = parseInt(this.dom.baudRateSelect.value, 10);
+                this.state.dataBits = parseInt(this.dom.dataBitsSelect.value, 10);
+                this.state.stopBits = parseInt(this.dom.stopBitsSelect.value, 10);
+                this.state.parity = this.dom.paritySelect.value;
+                this.log('SYS', `Serial settings updated: ${this.getConnectionParamsString()}`);
+                this.debouncedSaveState();
+            }
+
+             // --- Delimiter Management & RX Byte Pos ---
+              updateDelimiterSettings() {
+                 this.clearValidation(this.dom.delimiterHexInput.closest('fieldset'));
+                 const hex = this.dom.delimiterHexInput.value.trim();
+                 if (isValidDelimiterHex(hex)) {
+                      this.state.rxDelimiterHex = hex.toUpperCase();
+                 } else {
+                     this.showValidationError(this.dom.delimiterHexInput, 'Invalid Hex format. Use pairs like \'0A\', \'FF\', separated by spaces, or leave empty.');
+                     // Don't save invalid state, but also don't revert UI immediately. User needs to fix it.
+                 }
+
+                  this.state.rxUseDelimiter = this.dom.useDelimiterCheckbox.checked;
+                  // Update Cmd Byte Pos as well when either delimiter or checkbox changes
+                  const newCmdPos = parseInt(this.dom.cmdBytePosInput.value, 10);
+                  if (!isNaN(newCmdPos) && newCmdPos >= 0) {
+                     this.state.rxCmdBytePos = newCmdPos;
+                  } else {
+                      // Handle invalid input for cmdBytePos (e.g., set to 0 or show error?)
+                      this.dom.cmdBytePosInput.value = this.state.rxCmdBytePos; // Revert UI
+                      console.warn("Invalid Cmd Byte Position entered.");
+                      // Optionally show a temporary error/validation state for cmdBytePosInput
+                  }
+
+                  this.log('SYS', `RX Settings Updated - Delimiter: ${this.state.rxUseDelimiter ? `'${this.state.rxDelimiterHex || '(Empty)'}'` : 'Disabled'}, Cmd Byte Pos: ${this.state.rxCmdBytePos}`);
+                  this.debouncedSaveState();
+              }
+
+
+             // --- Script Management ---
+
+            renderScriptList() {
+                this.dom.scriptList.innerHTML = '';
+                if (!this.state.scripts || this.state.scripts.length === 0) {
+                    this.dom.scriptList.innerHTML = '<li><span class="item-details" style="color: #777;">No scripts defined yet.</span></li>';
+                 } else {
+                    this.state.scripts.forEach(script => {
+                        const li = document.createElement('li');
+                        li.dataset.scriptName = script.name;
+
+                        const detailsSpan = document.createElement('span');
+                        detailsSpan.className = 'item-details';
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'item-secondary'; // Use secondary style for name
+                        nameSpan.textContent = script.name;
+                        const title = `Script: ${script.name}${script.description ? `\nDesc: ${script.description}` : ''}`;
+                        nameSpan.title = title;
+                        detailsSpan.appendChild(nameSpan);
+
+                        const actionsSpan = document.createElement('span');
+                        actionsSpan.className = 'item-actions';
+
+                        const runBtn = document.createElement('button');
+                        runBtn.className = 'action small';
+                        runBtn.textContent = 'Run';
+                        runBtn.dataset.scriptName = script.name;
+                        runBtn.onclick = (e) => this.handleRunScript(e.target.dataset.scriptName);
+                        runBtn.disabled = !this.port;
+
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'subtle small';
+                        editBtn.textContent = 'Edit';
+                        editBtn.dataset.scriptName = script.name;
+                        editBtn.onclick = (e) => this.openScriptWizard(e.target.dataset.scriptName);
+
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'warning small';
+                        delBtn.textContent = 'Del';
+                        delBtn.dataset.scriptName = script.name;
+                        delBtn.onclick = (e) => this.handleDeleteScript(e.target.dataset.scriptName);
+
+                        actionsSpan.appendChild(runBtn);
+                        actionsSpan.appendChild(editBtn);
+                        actionsSpan.appendChild(delBtn);
+                        li.appendChild(detailsSpan);
+                        li.appendChild(actionsSpan);
+                        this.dom.scriptList.appendChild(li);
+                    });
+                 }
+                 this.updateSendButtonStates();
+            }
+
+             handleDeleteScript(scriptName) {
+                 if (confirm(`Are you sure you want to delete the script "${scriptName}"?`)) {
+                     this.state.scripts = this.state.scripts.filter(s => s.name !== scriptName);
+                     this.renderScriptList();
+                     this.debouncedSaveState();
+                     this.log('SYS', `Script '${scriptName}' deleted.`);
+                 }
+             }
+
+             // --- Script Execution Engine ---
+
+             buildScriptApi() {
+                 const self = this;
+                 return {
+                     sendCommand: async (commandName) => {
+                         const cmd = self.state.txCommands.find(c => c.name === commandName);
+                         if (cmd && self.port) {
+                             const dataBytes = hexStringToUint8Array(cmd.hex);
+                             self.log('SCRIPT', `Sending command: '${commandName}' (Hex: ${cmd.hex})`);
+                             return self.write(dataBytes, `Script->${commandName}`);
+                         } else if (!self.port) {
+                             self.log('SCRIPT', `Error: Cannot send command '${commandName}'. Not connected.`, 'Error');
+                             throw new Error(`ScriptError: Not connected. Cannot send command '${commandName}'.`);
+                         } else {
+                             self.log('SCRIPT', `Error: Command '${commandName}' not found.`, 'Error');
+                             throw new Error(`ScriptError: Command '${commandName}' not found.`);
+                         }
+                     },
+                     sendHex: async (hexString) => {
+                         if (self.port && isValidHex(hexString)) {
+                             const dataBytes = hexStringToUint8Array(hexString);
+                             self.log('SCRIPT', `Sending Hex: ${hexString}`);
+                             return self.write(dataBytes, `Script->Hex`);
+                         } else if (!self.port) {
+                             self.log('SCRIPT', `Error: Cannot send Hex '${hexString}'. Not connected.`, 'Error');
+                              throw new Error(`ScriptError: Not connected. Cannot send Hex.`);
+                         } else {
+                              self.log('SCRIPT', `Error: Invalid Hex string format: '${hexString}'`, 'Error');
+                              throw new Error(`ScriptError: Invalid Hex string format: '${hexString}'.`);
+                         }
+                     },
+                      sendAscii: async (asciiString) => {
+                          if (self.port) {
+                              const encoder = new TextEncoder();
+                              const dataBytes = encoder.encode(asciiString);
+                              self.log('SCRIPT', `Sending ASCII: '${asciiString}'`);
+                              return self.write(dataBytes, `Script->ASCII`);
+                          } else {
+                               self.log('SCRIPT', `Error: Cannot send ASCII '${asciiString}'. Not connected.`, 'Error');
+                               throw new Error(`ScriptError: Not connected. Cannot send ASCII.`);
+                          }
+                     },
+                     waitForData: (options = {}) => {
+                         const { pattern = null, timeout = 5000, format = 'raw' } = options;
+                         self.log('SCRIPT', `Waiting for data... (Timeout: ${timeout}ms${pattern ? `, Pattern: ${pattern}` : ''}, Format: ${format})`);
+
+                         return new Promise((resolve, reject) => {
+                             const waitId = Date.now() + Math.random();
+                             let timer = null;
+
+                             const cleanup = () => {
+                                 clearTimeout(timer);
+                                 const index = self.pendingScriptWaits.findIndex(w => w.id === waitId);
+                                 if (index !== -1) {
+                                     self.pendingScriptWaits.splice(index, 1);
+                                 }
+                             };
+
+                              timer = setTimeout(() => {
+                                 cleanup();
+                                 self.log('SCRIPT', `Wait timed out after ${timeout}ms.`);
+                                 resolve(null);
+                             }, timeout);
+
+                             self.pendingScriptWaits.push({ id: waitId, resolve, reject, options, timer, cleanup });
+                         });
+                     },
+                     log: (message) => {
+                         self.log('SCRIPT', String(message));
+                     },
+                     sleep: (milliseconds) => {
+                          self.log('SCRIPT', `Sleeping for ${milliseconds}ms...`);
+                         return new Promise(resolve => setTimeout(resolve, milliseconds));
+                     },
+                     getCommands: () => {
+                         return JSON.parse(JSON.stringify(self.state.txCommands || []));
+                     },
+                     getRxDefinitions: () => {
+                         return JSON.parse(JSON.stringify({
+                              commandBytePosition: self.state.rxCmdBytePos,
+                              commandMap: self.state.rxCmdMap || {}
+                         }));
+                     },
+                 };
+             }
+
+            checkPendingWaits(receivedUint8Array) {
+                 if (this.pendingScriptWaits.length === 0) return;
+
+                const receivedHex = uint8ArrayToHexString(receivedUint8Array);
+                const decoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false });
+                const receivedText = decoder.decode(receivedUint8Array);
+                const rxDescription = this.getRxDescription(receivedUint8Array);
+
+                 for (let i = this.pendingScriptWaits.length - 1; i >= 0; i--) {
+                     const wait = this.pendingScriptWaits[i];
+                     const { resolve, reject, options, cleanup, id } = wait;
+                     const { pattern = null, format = 'raw' } = options;
+
+                     let match = false;
+                     try {
+                          if (!pattern) {
+                              match = true;
+                          } else {
+                              const regex = (pattern instanceof RegExp) ? pattern : new RegExp(String(pattern), 'i');
+
+                              switch (format) {
+                                  case 'ascii': match = regex.test(receivedText); break;
+                                  case 'hex': match = regex.test(receivedHex.replace(/\s/g, '')); break;
+                                  case 'description': match = !!rxDescription && regex.test(rxDescription); break;
+                                  case 'raw': default: match = regex.test(receivedHex.replace(/\s/g, '')); break;
+                              }
+                          }
+                     } catch (e) {
+                          console.error("Error testing pattern in waitForData:", e);
+                          this.log('SCRIPT', `Error evaluating pattern: ${e.message}`, 'Error');
+                          cleanup();
+                          reject(new Error(`ScriptError: Invalid pattern or matching error: ${e.message}`));
+                          continue;
+                     }
+
+                     if (match) {
+                         cleanup();
+                         const resultData = { data: receivedUint8Array, text: receivedText, hex: receivedHex, description: rxDescription };
+                         this.log('SCRIPT', `Wait condition met. Resolving promise. (Hex: ${receivedHex})`);
+                         resolve(resultData);
+                     }
+                 }
+             }
+
+              // Helper to get RX description for a message
+              getRxDescription(messageUint8Array) {
+                  const cmdPos = parseInt(this.state.rxCmdBytePos, 10);
+                  if (!isNaN(cmdPos) && cmdPos >= 0 && messageUint8Array.length > cmdPos) {
+                      const cmdByte = messageUint8Array[cmdPos];
+                      const cmdByteHex = padHexByte(cmdByte.toString(16)); // Use padding helper
+                      return this.state.rxCmdMap[cmdByteHex] || null; // Lookup padded hex
+                  }
+                  return null;
+              }
+
+              rejectAllPendingWaits(reason = 'Operation cancelled') {
+                   for (let i = this.pendingScriptWaits.length - 1; i >= 0; i--) {
+                        const wait = this.pendingScriptWaits[i];
+                        wait.cleanup();
+                        wait.reject(new Error(`ScriptError: ${reason}`));
+                        this.log('SCRIPT', `Wait rejected: ${reason}`);
+                   }
+              }
+
+             async handleRunScript(scriptName) {
+                const script = this.state.scripts.find(s => s.name === scriptName);
+                 if (!script) {
+                     this.log('SYS', `Cannot run: Script "${scriptName}" not found.`, 'Error');
+                     return;
+                 }
+                 if (!this.port) {
+                     this.log('SYS', `Cannot run script "${scriptName}": Not connected.`, 'Warning');
+                     return;
+                 }
+
+                 this.log('SYS', `Running script: "${scriptName}"...`);
+                 try {
+                      const scriptApi = this.buildScriptApi();
+                       const scriptFunction = new AsyncFunction(...Object.keys(scriptApi), script.code);
+                       await scriptFunction(...Object.values(scriptApi));
+                      this.log('SYS', `Script "${scriptName}" finished successfully.`);
+
+                 } catch (error) {
+                     console.error(`Script "${scriptName}" error:`, error);
+                     let errMsg = error.message || String(error);
+                     if (!(error instanceof Error && error.message.startsWith('ScriptError:'))) {
+                          errMsg = `Execution error: ${errMsg}`;
+                     }
+                     this.log('SCRIPT', `ERROR in "${scriptName}": ${errMsg}`, 'Error');
+                     this.log('SYS', `Script "${scriptName}" finished with errors.`);
+                 }
+             }
+
+             // --- Script Wizard Logic ---
+
+             openScriptWizard(editScriptName = null) {
+                 console.log("Opening wizard for:", editScriptName || "New Script");
+                 this.clearWizardValidation();
+                 const isEditing = !!editScriptName;
+
+                 if (isEditing) {
+                     const scriptToEdit = this.state.scripts.find(s => s.name === editScriptName);
+                     if (!scriptToEdit) {
+                         this.log('SYS', `Cannot edit script '${editScriptName}', not found.`, 'Error');
+                         return;
+                     }
+                     this.dom.wizardTitle.textContent = "Edit Script";
+                     this.wizardData = {
+                         originalScriptName: scriptToEdit.name,
+                         scriptName: scriptToEdit.name,
+                         scriptDescription: scriptToEdit.description || "",
+                         pastedCode: scriptToEdit.code
+                     };
+                     this.dom.wizardOriginalScriptNameInput.value = scriptToEdit.name;
+                     this.dom.wizardScriptNameInput.value = scriptToEdit.name;
+                     this.dom.wizardScriptDescriptionInput.value = scriptToEdit.description || "";
+                     this.dom.wizardPastedCodeInput.value = scriptToEdit.code;
+                     this.extractAndDisplayWizardExplanation(scriptToEdit.code);
+                 } else {
+                     this.dom.wizardTitle.textContent = "Create New Script";
+                     this.wizardData = { originalScriptName: "", scriptName: "", scriptDescription: "", pastedCode: "" };
+                     this.dom.wizardOriginalScriptNameInput.value = "";
+                     this.dom.wizardScriptNameInput.value = "";
+                     this.dom.wizardScriptDescriptionInput.value = "";
+                     this.dom.wizardPastedCodeInput.value = "";
+                     this.dom.wizardAiPromptDisplay.value = "";
+                     this.extractAndDisplayWizardExplanation("");
+                 }
+
+                 this.wizardCurrentStep = 1;
+                 this.showWizardStep(1);
+                 this.dom.scriptWizardModal.classList.remove('hidden');
+                 this.dom.wizardScriptNameInput.focus();
+             }
+
+             closeScriptWizard() {
+                 this.dom.scriptWizardModal.classList.add('hidden');
+             }
+
+             showWizardStep(stepNumber) {
+                 this.wizardCurrentStep = stepNumber;
+                 [this.dom.wizardStep1, this.dom.wizardStep2, this.dom.wizardStep3].forEach((step, index) => {
+                     step.classList.toggle('active', index + 1 === stepNumber);
+                 });
+
+                 this.dom.wizardBackBtn.classList.toggle('hidden', stepNumber === 1);
+                 this.dom.wizardCopyPromptBtn.classList.toggle('hidden', stepNumber !== 2);
+                 this.dom.wizardSaveBtn.classList.toggle('hidden', stepNumber !== 3);
+                 this.dom.wizardNextBtn.classList.toggle('hidden', stepNumber === 3);
+
+                 if (stepNumber === 1) this.dom.wizardNextBtn.textContent = "Next: Generate Prompt";
+                 if (stepNumber === 2) this.dom.wizardNextBtn.textContent = "Next: Paste Code";
+
+                 if (stepNumber === 3) {
+                     this.extractAndDisplayWizardExplanation(this.dom.wizardPastedCodeInput.value);
+                 }
+             }
+
+             handleWizardNext() {
+                 if (this.wizardCurrentStep === 1) {
+                     if (this.validateWizardStep1()) {
+                         this.generateWizardPrompt();
+                         this.showWizardStep(2);
+                     }
+                 } else if (this.wizardCurrentStep === 2) {
+                     this.showWizardStep(3);
+                     this.dom.wizardPastedCodeInput.focus();
+                 }
+             }
+
+             handleWizardBack() {
+                 if (this.wizardCurrentStep === 2) {
+                     this.showWizardStep(1);
+                     this.dom.wizardScriptDescriptionInput.focus();
+                 } else if (this.wizardCurrentStep === 3) {
+                     this.wizardData.pastedCode = this.dom.wizardPastedCodeInput.value;
+                     this.showWizardStep(2);
+                 }
+             }
+
+            clearWizardValidation() {
+                this.dom.wizardScriptNameError.classList.add('hidden');
+                this.dom.wizardScriptDescriptionError.classList.add('hidden');
+                this.dom.wizardPastedCodeError.classList.add('hidden');
+                this.dom.wizardScriptNameInput.classList.remove('invalid');
+                this.dom.wizardScriptDescriptionInput.classList.remove('invalid');
+                this.dom.wizardPastedCodeInput.classList.remove('invalid');
+            }
+
+            validateWizardStep1() {
+                this.clearWizardValidation();
+                let isValid = true;
+                const currentName = this.dom.wizardScriptNameInput.value.trim();
+                const isEditing = !!this.wizardData.originalScriptName;
+                const originalName = this.wizardData.originalScriptName;
+
+                if (!currentName) {
+                    this.showValidationError(this.dom.wizardScriptNameInput, "Script name is required.", this.dom.wizardScriptNameError);
+                    isValid = false;
+                } else {
+                    const nameExists = this.state.scripts.some(s => s.name === currentName);
+                    if (nameExists && (!isEditing || currentName !== originalName)) {
+                        this.showValidationError(this.dom.wizardScriptNameInput, "Script name must be unique.", this.dom.wizardScriptNameError);
+                        isValid = false;
+                    }
+                }
+
+                if (!this.dom.wizardScriptDescriptionInput.value.trim()) {
+                    this.showValidationError(this.dom.wizardScriptDescriptionInput, "Script description is required.", this.dom.wizardScriptDescriptionError);
+                    isValid = false;
+                }
+                return isValid;
+            }
+
+            validateWizardStep3() {
+                this.clearWizardValidation();
+                let isValid = true;
+                if (!this.dom.wizardPastedCodeInput.value) {
+                    this.showValidationError(this.dom.wizardPastedCodeInput, "Pasted code cannot be empty.", this.dom.wizardPastedCodeError);
+                    isValid = false;
+                }
+                 if (!this.dom.wizardScriptNameInput.value.trim()) {
+                    this.showValidationError(this.dom.wizardScriptNameInput, "Script name is required.", this.dom.wizardScriptNameError);
+                    isValid = false;
+                 }
+                return isValid;
+            }
+
+
+            generateWizardPrompt() {
+                this.wizardData.scriptName = this.dom.wizardScriptNameInput.value.trim();
+                this.wizardData.scriptDescription = this.dom.wizardScriptDescriptionInput.value.trim();
+
+                const promptLines = [];
+                promptLines.push("Objective: Generate a JavaScript code snippet for the Web Serial Terminal's scripting feature based on the user's request below.");
+                promptLines.push("\nContext: The script will run in a browser environment with access to a predefined asynchronous API to interact with a connected serial device.");
+                promptLines.push("\nAvailable Scripting API Functions (use `await` for async functions):");
+                promptLines.push("- `log(message: string)`: Logs a message to the terminal display.");
+                promptLines.push("- `await sleep(milliseconds: number): Promise<void>`: Pauses script execution.");
+                promptLines.push("- `await sendCommand(commandName: string): Promise<boolean>`: Sends a predefined TX command by its name. Returns true on successful send attempt, false/throws on error.");
+                promptLines.push("- `await sendHex(hexString: string): Promise<boolean>`: Sends raw hex data (e.g., 'AA BB 03'). Returns true/false.");
+                promptLines.push("- `await sendAscii(asciiString: string): Promise<boolean>`: Sends an ASCII string. Returns true/false.");
+                promptLines.push("- `await waitForData(options: object): Promise<object | null>`: Waits for incoming data matching criteria. Returns received data object `{ data: Uint8Array, text: string, hex: string, description: string? }` or `null` on timeout.");
+                promptLines.push("  - `options`: `{ pattern?: string | RegExp, timeout?: number (ms, default 5000), format?: 'ascii' | 'hex' | 'description' | 'raw' }` (`pattern` matches against specified format. `description` matches mapped RX description).");
+                promptLines.push("- `getCommands(): object[]`: Returns read-only array of available TX commands: `[{ name, hex, description }, ...]`. ");
+                promptLines.push("- `getRxDefinitions(): object`: Returns read-only RX mapping: `{ commandBytePosition: number, commandMap: { 'HEX': description, ... } }`.");
+
+                promptLines.push("\nCurrent Project Context:");
+                promptLines.push(` - Serial Settings: ${this.getConnectionParamsString()}`);
+                promptLines.push(" - TX Commands:");
+                if (this.state.txCommands.length > 0) {
+                    this.state.txCommands.forEach(cmd => {
+                        promptLines.push(`   - Name: "${cmd.name}", Hex: "${cmd.hex}"${cmd.description ? `, Desc: "${cmd.description}"` : ''}`);
+                    });
+                } else { promptLines.push("   (No TX commands defined)"); }
+                promptLines.push(" - RX Definitions:");
+                promptLines.push(`   - Command Byte Index: ${this.state.rxCmdBytePos}`);
+                const rxMapEntries = Object.entries(this.state.rxCmdMap);
+                if (rxMapEntries.length > 0) {
+                    rxMapEntries.forEach(([hex, desc]) => {
+                        promptLines.push(`   - Map: Hex 0x${hex} => "${desc}"`);
+                    });
+                } else { promptLines.push("   (No RX command mappings defined)"); }
+                promptLines.push(`   - Delimiter: ${this.state.rxUseDelimiter ? `Enabled, Hex: "${this.state.rxDelimiterHex || '(None)'}"` : 'Disabled'}`);
+
+                promptLines.push("\nUser's Script Request:");
+                promptLines.push("```text");
+                promptLines.push(this.wizardData.scriptDescription);
+                promptLines.push("```");
+
+                promptLines.push("\nInstructions for AI:");
+                promptLines.push("- Generate a single JavaScript code block (using ```javascript ... ``` fences).");
+                promptLines.push("- The code block should contain ONLY the script code based on the user's request above.");
+                promptLines.push("- Use ONLY the provided API functions.");
+                promptLines.push("- Use `await` correctly for all asynchronous API calls.");
+                promptLines.push("- Include basic error handling (e.g., check `waitForData` result, use try/catch).");
+                promptLines.push("- IMPORTANT: At the VERY END of the JavaScript code, but still INSIDE the SAME code block, include a block comment starting with `/** Script Explanation:` and ending with `*/`.");
+                promptLines.push("- Inside this final comment block, provide a simple, bullet-point explanation of what the script does, including rough timing (e.g., waits). Use plain language suitable for non-programmers. Example of the required final comment block:");
+                promptLines.push("  /** Script Explanation:\n   * - Sends the 'Reset MCU' command.\n   * - Waits up to 1 second for an 'ACK Signal'.\n   * - If ACK received, sends 'Query Status'.\n   * - If no ACK after 1 second, logs a timeout error.\n  */");
+                promptLines.push("- Your entire response must be ONLY this single code block containing both the script logic and the final explanation comment. Do NOT include any other text before the opening ```javascript or after the closing ```.");
+
+                this.dom.wizardAiPromptDisplay.value = promptLines.join('\n');
+            }
+
+             copyWizardPrompt() {
+                 navigator.clipboard.writeText(this.dom.wizardAiPromptDisplay.value)
+                     .then(() => {
+                         this.log('SYS', 'AI script prompt copied to clipboard.');
+                         alert("AI prompt copied to clipboard!");
+                     })
+                     .catch(err => {
+                         console.error('Failed to copy AI prompt:', err);
+                         this.log('SYS', 'Error copying AI prompt.', 'Error');
+                         alert("Error copying prompt. See console for details.");
+                     });
+             }
+
+            extractAndDisplayWizardExplanation(code) {
+                const displayEl = this.dom.wizardAiExplanationDisplay;
+                if (!code) {
+                    displayEl.textContent = '(Explanation will appear here after pasting code containing the explanation comment block)';
+                    displayEl.classList.add('placeholder');
+                    return;
+                }
+                 const match = code.match(SCRIPT_EXPLANATION_REGEX);
+                 if (match && match[1]) {
+                     let explanation = match[1].trim().replace(/^\s*\*\s?/gm, '');
+                     displayEl.textContent = explanation.trim();
+                     displayEl.classList.remove('placeholder');
+                 } else {
+                     displayEl.textContent = '(No explanation comment found in the standard format: /** Script Explanation: ... */)';
+                     displayEl.classList.add('placeholder');
+                 }
+            }
+
+             saveScriptFromWizard() {
+                 if (!this.validateWizardStep3()) {
+                     this.showWizardStep(3);
+                     return;
+                 }
+
+                 this.wizardData.scriptName = this.dom.wizardScriptNameInput.value.trim();
+                 this.wizardData.scriptDescription = this.dom.wizardScriptDescriptionInput.value.trim();
+                 this.wizardData.pastedCode = this.dom.wizardPastedCodeInput.value;
+
+                 const newScript = {
+                     name: this.wizardData.scriptName,
+                     description: this.wizardData.scriptDescription,
+                     code: this.wizardData.pastedCode
+                 };
+
+                 const isEditing = !!this.wizardData.originalScriptName;
+                 if (isEditing) {
+                     const index = this.state.scripts.findIndex(s => s.name === this.wizardData.originalScriptName);
+                     if (index !== -1) {
+                         this.state.scripts[index] = newScript;
+                         this.log('SYS', `Script '${newScript.name}' updated.`);
+                     } else {
+                         console.error("Original script not found for editing:", this.wizardData.originalScriptName);
+                         this.log('SYS', `Error updating script '${this.wizardData.originalScriptName}'. Not found. Adding as new.`, 'Warning');
+                         this.state.scripts.push(newScript);
+                     }
+                 } else {
+                     this.state.scripts.push(newScript);
+                     this.log('SYS', `Script '${newScript.name}' added.`);
+                 }
+
+                 this.state.scripts.sort((a, b) => a.name.localeCompare(b.name));
+                 this.renderScriptList();
+                 this.debouncedSaveState();
+                 this.closeScriptWizard();
+             }
+
+             // --- Project Management ---
+
+             saveState() {
+                 try {
+                      const stateToSave = { ...this.state };
+                      delete stateToSave.port;
+                      delete stateToSave.reader;
+                      delete stateToSave.writer;
+                      delete stateToSave.keepReading;
+                      delete stateToSave.pendingScriptWaits;
+                      delete stateToSave.rxBuffer;
+
+                     const stateString = JSON.stringify(stateToSave);
+                     localStorage.setItem(LOCAL_STORAGE_KEY_STATE, stateString);
+                 } catch (error) {
+                     console.error("Error saving state to localStorage:", error);
+                      this.log('SYS', 'Error auto-saving project state.', 'Warning');
+                 }
+             }
+
+             loadState() {
+                 try {
+                     const savedStateString = localStorage.getItem(LOCAL_STORAGE_KEY_STATE);
+                     if (savedStateString) {
+                         const parsedState = JSON.parse(savedStateString);
+                         if (this.isValidProjectData(parsedState)) {
+                             this.state = { ...this.getDefaultState(), ...parsedState };
+                              this.state.txCommands = this.state.txCommands || [];
+                              this.state.rxCmdMap = this.state.rxCmdMap || {};
+                              this.state.scripts = this.state.scripts || [];
+                              this.state.dataBits = this.state.dataBits || this.getDefaultState().dataBits;
+                              this.state.stopBits = this.state.stopBits || this.getDefaultState().stopBits;
+                              this.state.parity = this.state.parity || this.getDefaultState().parity;
+
+                             this.log('SYS', 'Loaded previous state from localStorage.');
+                         } else {
+                              this.log('SYS', 'Invalid state found in localStorage. Using defaults.', 'Warning');
+                              localStorage.removeItem(LOCAL_STORAGE_KEY_STATE);
+                              this.state = this.getDefaultState();
+                         }
+                     } else {
+                          this.log('SYS', 'No previous state found, using defaults.');
+                          this.state = this.getDefaultState();
+                     }
+                 } catch (error) {
+                     console.error("Error loading state from localStorage:", error);
+                     this.log('SYS', 'Error loading previous project state. Using defaults.', 'Warning');
+                     localStorage.removeItem(LOCAL_STORAGE_KEY_STATE);
+                     this.state = this.getDefaultState();
+                 }
+             }
+
+             openProject() {
+                 this.dom.loadProjectInput.click();
+             }
+
+             handleProjectFileSelected(event) {
+                 const file = event.target.files[0];
+                 if (!file) return;
+
+                 const reader = new FileReader();
+                 reader.onload = (e) => {
+                     try {
+                         const projectData = JSON.parse(e.target.result);
+                         if (this.isValidProjectData(projectData)) {
+                             const wasConnected = !!this.port;
+                             if (wasConnected) {
+                                 this.log('SYS', 'Disconnecting current connection before loading project...');
+                                 this.disconnect().then(() => {
+                                      this.loadProjectData(projectData, file.name);
+                                  });
+                             } else {
+                                 this.loadProjectData(projectData, file.name);
+                             }
+                         } else {
+                              throw new Error("Invalid project file format or missing/invalid required fields.");
+                         }
+                     } catch (error) {
+                         console.error("Error loading project file:", error);
+                         this.log('SYS', `Error loading project: ${error.message}`, 'Error');
+                         alert(`Error loading project file:\n${error.message}\n\nPlease ensure the file is a valid JSON project file created by this application.`);
+                     } finally {
+                          event.target.value = null;
+                     }
+                 };
+                 reader.onerror = (e) => {
+                      console.error("Error reading file:", e);
+                      this.log('SYS', 'Error reading project file.', 'Error');
+                      alert("Error reading the selected file.");
+                      event.target.value = null;
+                 };
+                 reader.readAsText(file);
+             }
+
+              loadProjectData(projectData, filename) {
+                  this.state = { ...this.getDefaultState(), ...projectData };
+                  this.state.txCommands = this.state.txCommands || [];
+                  this.state.rxCmdMap = this.state.rxCmdMap || {};
+                  this.state.scripts = this.state.scripts || [];
+                  this.state.dataBits = this.state.dataBits || this.getDefaultState().dataBits;
+                  this.state.stopBits = this.state.stopBits || this.getDefaultState().stopBits;
+                  this.state.parity = this.state.parity || this.getDefaultState().parity;
+
+                  const projectName = filename.replace(/\.json$/i, '');
+                  this.setProjectName(projectName);
+                  this.state.projectName = projectName;
+                  this.updateUIFromState();
+                  this.saveState(); // Save loaded state to localStorage
+                  this.log('SYS', `Project "${this.state.projectName}" loaded successfully.`);
+              }
+
+            isValidProjectData(data) {
+                 const validParity = ['none', 'even', 'odd'];
+                 return data &&
+                        typeof data.projectName === 'string' &&
+                        typeof data.baudRate === 'number' &&
+                        (typeof data.dataBits === 'number' && [7, 8].includes(data.dataBits)) &&
+                        (typeof data.stopBits === 'number' && [1, 2].includes(data.stopBits)) &&
+                        (typeof data.parity === 'string' && validParity.includes(data.parity)) &&
+                        Array.isArray(data.txCommands) &&
+                        typeof data.rxCmdBytePos === 'number' &&
+                        typeof data.rxCmdMap === 'object' && data.rxCmdMap !== null && !Array.isArray(data.rxCmdMap) &&
+                        typeof data.rxDelimiterHex === 'string' &&
+                        typeof data.rxUseDelimiter === 'boolean' &&
+                        Array.isArray(data.scripts) &&
+                        (data.scripts.length === 0 || (typeof data.scripts[0].name === 'string' && typeof data.scripts[0].code === 'string'));
+            }
+
+
+             saveProject() {
+                   const stateToSave = { ...this.state };
+                   delete stateToSave.port;
+                   delete stateToSave.reader;
+                   delete stateToSave.writer;
+                   delete stateToSave.keepReading;
+                   delete stateToSave.pendingScriptWaits;
+                   delete stateToSave.rxBuffer;
+
+                 const projectData = JSON.stringify(stateToSave, null, 2);
+                 const filename = `${this.state.projectName.replace(/[^a-z0-9._-]/gi, '_') || 'Untitled_Project'}.json`;
+                 const blob = new Blob([projectData], { type: 'application/json;charset=utf-8' });
+
+                 const link = document.createElement('a');
+                 link.href = URL.createObjectURL(blob);
+                 link.download = filename;
+                 link.style.display = 'none';
+                 document.body.appendChild(link);
+                 link.click();
+                 document.body.removeChild(link);
+                 URL.revokeObjectURL(link.href);
+
+                 this.log('SYS', `Project saved as ${filename}`);
+             }
+
+             // --- Validation Helpers ---
+             clearValidation(formElementOrScope) {
+                  formElementOrScope.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+                  formElementOrScope.querySelectorAll('.validation-error').forEach(el => el.classList.add('hidden'));
+             }
+
+             showValidationError(inputElement, message, errorSpan = null) {
+                 inputElement.classList.add('invalid');
+                 let targetSpan = errorSpan;
+                 if (!targetSpan) {
+                     targetSpan = inputElement.nextElementSibling;
+                     while(targetSpan && !targetSpan.classList.contains('validation-error')) {
+                         targetSpan = targetSpan.nextElementSibling;
+                     }
+                      if(!targetSpan) targetSpan = inputElement.closest('.form-group,.form-inline-group')?.querySelector('.validation-error');
+                 }
+
+                 if (targetSpan && targetSpan.classList.contains('validation-error')) {
+                     targetSpan.textContent = message;
+                     targetSpan.classList.remove('hidden');
+                 } else {
+                      console.warn("Validation error span not found for input:", inputElement, "Message:", message);
+                      inputElement.title = message;
+                 }
+             }
+
+
+            // --- Event Binding ---
+            bindEvents() {
+                // Connection
+                this.dom.connectBtn.onclick = () => this.connect();
+                this.dom.disconnectBtn.onclick = () => this.disconnect();
+
+                // Serial Settings
+                this.dom.baudRateSelect.onchange = () => this.updateSerialSettingsState();
+                this.dom.dataBitsSelect.onchange = () => this.updateSerialSettingsState();
+                this.dom.stopBitsSelect.onchange = () => this.updateSerialSettingsState();
+                this.dom.paritySelect.onchange = () => this.updateSerialSettingsState();
+
+                // Logging
+                this.dom.clearLogBtn.onclick = () => this.clearLog();
+                this.dom.copyLogBtn.onclick = () => this.copyLog();
+                this.dom.saveLogBtn.onclick = () => this.saveLogToFile();
+                this.dom.logThemeSelect.onchange = () => this.applyTheme();
+
+                // Project
+                this.dom.openProjectBtn.onclick = () => this.openProject();
+                this.dom.saveProjectBtn.onclick = () => this.saveProject();
+                this.dom.loadProjectInput.onchange = (e) => this.handleProjectFileSelected(e);
+
+                // TX Commands
+                this.dom.addTxCmdBtn.onclick = () => this.showAddTxCommandForm();
+                this.dom.saveTxCmdBtn.onclick = () => this.saveTxCommand();
+                this.dom.cancelTxCmdBtn.onclick = () => this.hideAddTxCommandForm();
+                 this.dom.txCmdNameInput.oninput = () => this.clearValidation(this.dom.txCmdNameInput);
+                 this.dom.txCmdDataHexInput.oninput = () => this.clearValidation(this.dom.txCmdDataHexInput);
+
+                // RX Definitions (NEW)
+                this.dom.cmdBytePosInput.onchange = () => this.updateDelimiterSettings(); // Also updates byte pos in state
+                this.dom.addRxDefBtn.onclick = () => this.showAddRxDefForm();
+                this.dom.saveRxDefBtn.onclick = () => this.saveRxDefinition();
+                this.dom.cancelRxDefBtn.onclick = () => this.hideAddRxDefForm();
+                 this.dom.rxDefValueHexInput.oninput = () => this.clearValidation(this.dom.rxDefValueHexInput);
+                 this.dom.rxDefDescriptionInput.oninput = () => this.clearValidation(this.dom.rxDefDescriptionInput);
+
+                // Delimiter
+                this.dom.delimiterHexInput.onchange = () => this.updateDelimiterSettings();
+                 this.dom.delimiterHexInput.oninput = () => this.clearValidation(this.dom.delimiterHexInput);
+                this.dom.useDelimiterCheckbox.onchange = () => this.updateDelimiterSettings();
+
+                // Scripting
+                this.dom.addScriptBtn.onclick = () => this.openScriptWizard();
+
+                // Script Wizard Modal Events
+                this.dom.wizardCloseBtn.onclick = () => this.closeScriptWizard();
+                this.dom.wizardCancelBtn.onclick = () => {
+                      if (confirm("Are you sure you want to cancel editing this script? Any changes will be lost.")) {
+                            this.closeScriptWizard();
+                      }
+                };
+                this.dom.wizardNextBtn.onclick = () => this.handleWizardNext();
+                this.dom.wizardBackBtn.onclick = () => this.handleWizardBack();
+                this.dom.wizardSaveBtn.onclick = () => this.saveScriptFromWizard();
+                this.dom.wizardCopyPromptBtn.onclick = () => this.copyWizardPrompt();
+                this.dom.wizardScriptNameInput.oninput = () => this.clearWizardValidation();
+                this.dom.wizardScriptDescriptionInput.oninput = () => this.clearWizardValidation();
+                this.dom.wizardPastedCodeInput.oninput = () => {
+                    this.clearValidation();
+                    this.extractAndDisplayWizardExplanation(this.dom.wizardPastedCodeInput.value);
+                };
+
+            } // End bindEvents()
+
+        } // End App Class
+
+        // --- Initialization ---
+        let app;
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new App();
+        });
+
+    </script>
+
+</body>
+</html>
